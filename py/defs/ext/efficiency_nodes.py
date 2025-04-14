@@ -56,6 +56,13 @@ CAPTURE_FIELD_LIST = {
     "Efficient Loader": {
         MetaField.MODEL_NAME: {"field_name": "ckpt_name"},
         MetaField.MODEL_HASH: {"field_name": "ckpt_name", "format": calc_model_hash},
+        MetaField.LORA_MODEL_NAME: {"field_name": "lora_name"},
+        MetaField.LORA_MODEL_HASH: {
+            "field_name": "lora_name",
+            "format": calc_lora_hash,
+        },
+        MetaField.LORA_STRENGTH_MODEL: {"field_name": "lora_model_strength"},
+        MetaField.LORA_STRENGTH_CLIP: {"field_name": "lora_clip_strength"},
         MetaField.CLIP_SKIP: {"field_name": "clip_skip", "format": convert_skip_clip},
         MetaField.POSITIVE_PROMPT: {"field_name": "positive"},
         MetaField.NEGATIVE_PROMPT: {"field_name": "negative"},
