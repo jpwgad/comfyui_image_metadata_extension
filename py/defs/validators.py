@@ -20,15 +20,16 @@ def _get_node_id_list(prompt, field_name):
                 d = deque()
                 if field_name in field_map and field_map[field_name] in node["inputs"]:
                     d.append(node["inputs"][field_map[field_name]][0])
-                while len(d) > 0:
+                while d:
                     nid2 = d.popleft()
+                    if nid2 not in prompt:
+                        continue
                     class_type = prompt[nid2]["class_type"]
-                    if class_type == "CLIPTextEncode":
+                    if "CLIPTextEncode" in class_type:
                         node_id_list[nid] = nid2
                         break
-                    inputs = prompt[nid2]["inputs"]
-                    for k, v in inputs.items():
-                        if isinstance(v, list):
+                    for k, v in prompt[nid2]["inputs"].items():
+                        if isinstance(v, list) and v:
                             d.append(v[0])
 
-    return node_id_list.values()
+    return list(node_id_list.values())
