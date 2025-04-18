@@ -12,15 +12,15 @@ from PIL.PngImagePlugin import PngInfo
 
 import folder_paths
 from comfy.cli_args import args
+from comfy.comfy_types.node_typing import ComfyNodeABC, InputTypeDict, IO
 
-from .base import BaseNode
 from .. import hook
 from ..capture import Capture
 from ..trace import Trace
 
 
 # refer. https://github.com/comfyanonymous/ComfyUI/blob/38b7ac6e269e6ecc5bdd6fefdfb2fb1185b09c9d/nodes.py#L1411
-class SaveImageWithMetaData(BaseNode):
+class SaveImageWithMetaData(ComfyNodeABC):
     OUTPUT_FORMATS = [
         "png", "png_with_json", "jpg", "jpg_with_json", "webp", "webp_with_json"
     ]
@@ -34,12 +34,12 @@ class SaveImageWithMetaData(BaseNode):
         self.compress_level = 4
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(s) -> InputTypeDict:
         return {
             "required": {
-                "images": ("IMAGE", {"tooltip": "The images to save."}),
-                "filename_prefix": ("STRING", {"default": "ComfyUI", "tooltip": "The prefix for the saved file. You can include formatting options like %date:yyyy-MM-dd% or %seed%, and combine them as needed, e.g., %date:hhmmss%_%seed%."}),
-                "subdirectory_name": ("STRING", {
+                "images": (IO.IMAGE, {"tooltip": "The images to save."}),
+                "filename_prefix": (IO.STRING, {"default": "ComfyUI", "tooltip": "The prefix for the saved file. You can include formatting options like %date:yyyy-MM-dd% or %seed%, and combine them as needed, e.g., %date:hhmmss%_%seed%."}),
+                "subdirectory_name": (IO.STRING, {
                     "default": "",
                     "tooltip": (
                         "Custom directory to save the images. Leave empty to use the default output "
@@ -69,7 +69,7 @@ class SaveImageWithMetaData(BaseNode):
                             "\n'workflow_only' - workflow metadata only, "
                             "\n'none' - no metadata."
                 }),
-                "include_batch_num": ("BOOLEAN", {
+                "include_batch_num": (IO.BOOLEAN, {
                     "default": True,
                     "tooltip": "Include batch numbers in filenames."
                 }),
@@ -84,6 +84,7 @@ class SaveImageWithMetaData(BaseNode):
     FUNCTION = "save_images"
     OUTPUT_NODE = True
     DESCRIPTION = "Saves the input images with metadata to your ComfyUI output directory."
+    CATEGORY = "SaveImage"
 
     pattern_format = re.compile(r"(%[^%]+%)")
     
@@ -268,14 +269,14 @@ class SaveImageWithMetaData(BaseNode):
         return filename
 
 
-class CreateExtraMetaData(BaseNode):
+class CreateExtraMetaData(ComfyNodeABC):
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(s) -> InputTypeDict:
         return {
             "optional": {
                 "extra_metadata": ("EXTRA_METADATA", {"forceInput": True}),
                 **{
-                    f"{type}{i}": ("STRING", {"default": "", "multiline": False})
+                    f"{type}{i}": (IO.STRING, {"default": "", "multiline": False})
                     for i in range(1, 5)
                     for type in ["key", "value"]
                 },
@@ -284,6 +285,8 @@ class CreateExtraMetaData(BaseNode):
 
     RETURN_TYPES = ("EXTRA_METADATA",)
     FUNCTION = "create_extra_metadata"
+    DESCRIPTION = "Creates custom extra metadata by adding key-value pairs. Empty values are allowed, but unpaired values are not."
+    CATEGORY = "SaveImage"
 
     def create_extra_metadata(self, extra_metadata=None, **keys_values):
         if extra_metadata is None:
