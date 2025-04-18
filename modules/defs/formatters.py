@@ -1,6 +1,5 @@
-import os
-import folder_paths
 import re
+import folder_paths
 from ..utils.hash import calc_hash
 from ..utils.embedding import get_embedding_file_path
 from comfy.sd1_clip import escape_important, token_weights, unescape_important

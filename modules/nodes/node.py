@@ -4,20 +4,19 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+import piexif
+import piexif.helper
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
-import numpy as np
 
 import folder_paths
 from comfy.cli_args import args
 
 from .base import BaseNode
-from ..capture import Capture
 from .. import hook
+from ..capture import Capture
 from ..trace import Trace
-
-import piexif
-import piexif.helper
 
 
 # refer. https://github.com/comfyanonymous/ComfyUI/blob/38b7ac6e269e6ecc5bdd6fefdfb2fb1185b09c9d/nodes.py#L1411
@@ -279,18 +278,16 @@ class CreateExtraMetaData(BaseNode):
     @classmethod
     def INPUT_TYPES(s):
         return {
-            "required": {
+            "optional": {
+                "extra_metadata": ("EXTRA_METADATA", {"forceInput": True}),
                 "key1": ("STRING", {"default": "", "multiline": False}),
                 "value1": ("STRING", {"default": "", "multiline": False}),
-            },
-            "optional": {
                 "key2": ("STRING", {"default": "", "multiline": False}),
                 "value2": ("STRING", {"default": "", "multiline": False}),
                 "key3": ("STRING", {"default": "", "multiline": False}),
                 "value3": ("STRING", {"default": "", "multiline": False}),
                 "key4": ("STRING", {"default": "", "multiline": False}),
                 "value4": ("STRING", {"default": "", "multiline": False}),
-                "extra_metadata": ("EXTRA_METADATA",),
             },
         }
 
