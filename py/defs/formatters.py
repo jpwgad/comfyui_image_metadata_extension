@@ -72,10 +72,11 @@ def extract_embedding_hashes(text, input_data):
     if not clip:
         return []
 
-    embedding_hashes = [
-        calc_hash(get_embedding_file_path(name, clip)) if get_embedding_file_path(name, clip) else ""
-        for name in embedding_names
-    ]
+    embedding_hashes = []
+    for name in embedding_names:
+        path = get_embedding_file_path(name, clip)
+        embedding_hashes.append(calc_hash(path) if path else "")
+
     return embedding_hashes
 
 # Helper function to get clip from the tokenizer
@@ -95,16 +96,16 @@ def _extract_embedding_names(text, input_data):
         return [], None
 
     # Extract embedding names
-    embedding_names = _extract_embedding_names_from_text(text)
+    embedding_names = set(_extract_embedding_names_from_text(text))
 
     # Escape and tokenize if necessary
     text = escape_important(text)
     parsed_weights = token_weights(text, 1.0)
 
-    # Add matches from tokenized and escaped text
-    embedding_names += [
-        match.group(1) for segment, _ in parsed_weights
+    embedding_names.update(
+        match.group(1)
+        for segment, _ in parsed_weights
         for match in re.finditer(embedding_pattern, unescape_important(segment))
-    ]
+    )
 
-    return embedding_names, clip
+    return list(embedding_names), clip
