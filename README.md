@@ -4,7 +4,7 @@
 
 Custom node for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). It adds additional metadata for saved images, ensuring compatibility with the Civitai website.
 
-This is a fork of [nkchocoai/ComfyUI-SaveImageWithMetaData](https://github.com/nkchocoai/ComfyUI-SaveImageWithMetaData).
+*This is a fork of [nkchocoai/ComfyUI-SaveImageWithMetaData](https://github.com/nkchocoai/ComfyUI-SaveImageWithMetaData).*
 
 **Key differences:**
 - Simplified the node by removing unnecessary fields for general use.
@@ -21,7 +21,7 @@ This is a fork of [nkchocoai/ComfyUI-SaveImageWithMetaData](https://github.com/n
 
   *(Lower quality, smaller file size. PNG images ignore this setting.)*
 - The `metadata_scope` option controls metadata inclusion:
-  - **`full`** – default metadata + extra metadata.
+  - **`full`** – default metadata with additional metadata.
   - **`default`** – same as the SaveImage node.
   - **`workflow_only`** – workflow metadata only.
   - **`none`** – no metadata.
@@ -82,3 +82,15 @@ Lora strings are automatically added to the prompt area, allowing the Civitai we
 | hh         | Hour                        |
 | mm         | Minute                      |
 | ss         | Second                      |
+
+## Supported Nodes and Extensions
+
+- **Comfy Core Nodes**:
+  - [modules/defs/samplers.py](modules/defs/samplers.py)
+  - [modules/defs/captures.py](modules/defs/captures.py)
+
+- **Third-Party Nodes**:
+  - [modules/defs/ext/](modules/defs/ext/)
+
+> [!TIP]  
+> If you encounter errors with the "full" metadata scope, it may be because your third-party nodes are not supported. In that case, you can either use alternative nodes from Comfy Core or create a custom extension in the [ext](modules/defs/ext/) folder.

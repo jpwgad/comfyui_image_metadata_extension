@@ -59,12 +59,12 @@ class SaveImageWithMetaData(ComfyNodeABC):
                             "\n'max' / 'lossless WebP' - 100"
                             "\n'high' - 80"
                             "\n'medium' - 60"
-                            "\n'low' - 30 (lower quality, smaller file size)"
-                            "\n\nNote: PNG images ignore this setting. "
+                            "\n'low' - 30"
+                            "\n\nNote: Lower quality, smaller file size. PNG images ignore this setting."
                 }),
                 "metadata_scope": (s.METADATA_OPTIONS, {
                     "tooltip": "Choose the metadata to save: "
-                            "\n'full' - default + extra metadata, "
+                            "\n'full' - default metadata with additional metadata, "
                             "\n'default' - same as SaveImage node, "
                             "\n'workflow_only' - workflow metadata only, "
                             "\n'none' - no metadata."
