@@ -82,9 +82,7 @@ class SaveImageWithMetaData(BaseNode):
 
     RETURN_TYPES = ()
     FUNCTION = "save_images"
-
     OUTPUT_NODE = True
-
     DESCRIPTION = "Saves the input images with metadata to your ComfyUI output directory."
 
     pattern_format = re.compile(r"(%[^%]+%)")
@@ -94,25 +92,25 @@ class SaveImageWithMetaData(BaseNode):
         base_format = output_format.replace("_with_json", "")
         return base_format, save_workflow_json
 
-    
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
-                    extra_pnginfo=None, extra_metadata=None, output_format="png", 
-                    quality=100, metadata_scope="full", 
-                    include_batch_num=True):
-        
+                    extra_pnginfo=None, extra_metadata=None, output_format="png",
+                    quality=100, metadata_scope="full",
+                    include_batch_num=True, pnginfo_dict=None):
         if extra_metadata is None:
             extra_metadata = {}
-        
+
         base_format, save_workflow_json = self.parse_output_format(output_format)
-        
-        pnginfo_dict = self.generate_metadata(extra_metadata) if metadata_scope == "full" else {}
+
+        pnginfo = PngInfo()
+        if pnginfo_dict is None:
+            pnginfo_dict = self.gen_pnginfo() if metadata_scope == "full" else {}
 
         filename_prefix = self.format_filename(filename_prefix, pnginfo_dict) + self.prefix_append
 
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
             filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0]
         )
-        
+
         if subdirectory_name:
             subdirectory_name = self.format_filename(subdirectory_name, pnginfo_dict)
             full_output_folder = os.path.join(self.output_dir, subdirectory_name)
@@ -124,24 +122,29 @@ class SaveImageWithMetaData(BaseNode):
         for batch_number, image in enumerate(images):
             i = 255. * image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            metadata = self.prepare_pnginfo(pnginfo, pnginfo_dict, batch_number, len(images), prompt, extra_pnginfo, metadata_scope)
 
-            metadata = self.prepare_pnginfo(pnginfo_dict, batch_number, len(images), prompt, extra_pnginfo, metadata_scope)
+            # Add user extra metadata to image metadata
+            for k, v in extra_metadata.items():
+                if k:
+                    metadata.add_text(k, v if isinstance(v, str) else json.dumps(v))
 
             filename_with_batch_num = f"{filename}_{batch_number:05}" if include_batch_num else filename
-
             file = f"{filename_with_batch_num}.{base_format}"
+            path = os.path.join(full_output_folder, file)
 
-            if os.path.exists(os.path.join(full_output_folder, file)):
+            if os.path.exists(path):
                 file = self.find_next_available_filename(full_output_folder, filename_with_batch_num, base_format)
+                path = os.path.join(full_output_folder, file)
 
             quality_value = self.get_quality_value(quality)
 
             if base_format == "webp":
-                img.save(os.path.join(full_output_folder, file), "WEBP", lossless=(quality_value == 100), quality=quality_value)
+                img.save(path, "WEBP", lossless=(quality_value == 100), quality=quality_value)
             elif base_format == "png":
-                img.save(os.path.join(full_output_folder, file), pnginfo=metadata, compress_level=self.compress_level)
+                img.save(path, pnginfo=metadata, compress_level=self.compress_level)
             else:
-                img.save(os.path.join(full_output_folder, file), optimize=True, quality=quality_value)
+                img.save(path, optimize=True, quality=quality_value)
 
             if base_format in ["jpg", "webp"]:
                 exif_bytes = piexif.dump({
@@ -149,7 +152,7 @@ class SaveImageWithMetaData(BaseNode):
                         piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(Capture.gen_parameters_str(pnginfo_dict), encoding="unicode")
                     }
                 })
-                piexif.insert(exif_bytes, os.path.join(full_output_folder, file))
+                piexif.insert(exif_bytes, path)
 
             results.append({"filename": file, "subfolder": full_output_folder, "type": self.type})
 
@@ -178,22 +181,13 @@ class SaveImageWithMetaData(BaseNode):
     def get_quality_value(self, quality):
         return {"max": 100, "high": 80, "medium": 60, "low": 30}.get(quality, 100)
 
-    def generate_metadata(self, extra_metadata):
-        """
-        Merging extra metadata with the base metadata.
-        """
-        pnginfo_dict = self.gen_pnginfo()
-        pnginfo_dict.update({k: v.replace(",", "/") for k, v in extra_metadata.items() if k and v})
-        return pnginfo_dict
-
-    def prepare_pnginfo(self, pnginfo_dict, batch_number, total_images, prompt, extra_pnginfo, metadata_scope):
+    def prepare_pnginfo(self, metadata, pnginfo_dict, batch_number, total_images, prompt, extra_pnginfo, metadata_scope):
         """
         Return final PNG metadata with batch information, parameters, and optional prompt details.
         """
         if metadata_scope == "none":
             return None
 
-        metadata = PngInfo()
         pnginfo_copy = pnginfo_dict.copy()
 
         if total_images > 1:
@@ -280,39 +274,27 @@ class CreateExtraMetaData(BaseNode):
         return {
             "optional": {
                 "extra_metadata": ("EXTRA_METADATA", {"forceInput": True}),
-                "key1": ("STRING", {"default": "", "multiline": False}),
-                "value1": ("STRING", {"default": "", "multiline": False}),
-                "key2": ("STRING", {"default": "", "multiline": False}),
-                "value2": ("STRING", {"default": "", "multiline": False}),
-                "key3": ("STRING", {"default": "", "multiline": False}),
-                "value3": ("STRING", {"default": "", "multiline": False}),
-                "key4": ("STRING", {"default": "", "multiline": False}),
-                "value4": ("STRING", {"default": "", "multiline": False}),
-            },
+                **{
+                    f"{type}{i}": ("STRING", {"default": "", "multiline": False})
+                    for i in range(1, 5)
+                    for type in ["key", "value"]
+                },
+            }
         }
 
     RETURN_TYPES = ("EXTRA_METADATA",)
-
     FUNCTION = "create_extra_metadata"
 
-    def create_extra_metadata(
-        self,
-        extra_metadata={},
-        key1="",
-        value1="",
-        key2="",
-        value2="",
-        key3="",
-        value3="",
-        key4="",
-        value4="",
-    ):
-        extra_metadata.update(
-            {
-                key1: value1,
-                key2: value2,
-                key3: value3,
-                key4: value4,
-            }
-        )
+    def create_extra_metadata(self, extra_metadata=None, **keys_values):
+        if extra_metadata is None:
+            extra_metadata = {}
+
+        for i in range(1, 5):
+            key = keys_values.get(f"key{i}")
+            value = keys_values.get(f"value{i}")
+            if key:
+                extra_metadata[key] = value if value else ""  # Allow empty values for the metadata
+            elif value:
+                raise ValueError(f"Value provided for 'value{i}' without corresponding 'key{i}'.")
+
         return (extra_metadata,)
