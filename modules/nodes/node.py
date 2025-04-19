@@ -202,10 +202,9 @@ class SaveImageWithMetaData(ComfyNodeABC):
         if prompt is not None and metadata_scope != "workflow_only":
             metadata.add_text("prompt", json.dumps(prompt))
 
-        if extra_pnginfo and isinstance(extra_pnginfo, dict):
-            for k, v in extra_pnginfo.items():
-                value_to_add = json.dumps(v) if not isinstance(v, str) else v
-                metadata.add_text(k, value_to_add)
+        if extra_pnginfo is not None:
+            for x in extra_pnginfo:
+                metadata.add_text(x, json.dumps(extra_pnginfo[x]))
 
         return metadata
 
