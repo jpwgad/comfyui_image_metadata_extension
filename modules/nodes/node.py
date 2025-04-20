@@ -11,8 +11,6 @@ from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
 import folder_paths
-from comfy.cli_args import args
-from comfy.comfy_types.node_typing import ComfyNodeABC, InputTypeDict, IO
 
 from .. import hook
 from ..capture import Capture
@@ -20,7 +18,7 @@ from ..trace import Trace
 
 
 # refer. https://github.com/comfyanonymous/ComfyUI/blob/38b7ac6e269e6ecc5bdd6fefdfb2fb1185b09c9d/nodes.py#L1411
-class SaveImageWithMetaData(ComfyNodeABC):
+class SaveImageWithMetaData:
     OUTPUT_FORMATS = [
         "png", "png_with_json", "jpg", "jpg_with_json", "webp", "webp_with_json"
     ]
@@ -34,12 +32,12 @@ class SaveImageWithMetaData(ComfyNodeABC):
         self.compress_level = 4
 
     @classmethod
-    def INPUT_TYPES(s) -> InputTypeDict:
+    def INPUT_TYPES(s):
         return {
             "required": {
-                "images": (IO.IMAGE, {"tooltip": "The images to save."}),
-                "filename_prefix": (IO.STRING, {"default": "ComfyUI", "tooltip": "The prefix for the saved file. You can include formatting options like %date:yyyy-MM-dd% or %seed%, and combine them as needed, e.g., %date:hhmmss%_%seed%."}),
-                "subdirectory_name": (IO.STRING, {
+                "images": ("IMAGE", {"tooltip": "The images to save."}),
+                "filename_prefix": ("STRING", {"default": "ComfyUI", "tooltip": "The prefix for the saved file. You can include formatting options like %date:yyyy-MM-dd% or %seed%, and combine them as needed, e.g., %date:hhmmss%_%seed%."}),
+                "subdirectory_name": ("STRING", {
                     "default": "",
                     "tooltip": (
                         "Custom directory to save the images. Leave empty to use the default output "
@@ -69,7 +67,7 @@ class SaveImageWithMetaData(ComfyNodeABC):
                             "\n'workflow_only' - workflow metadata only, "
                             "\n'none' - no metadata."
                 }),
-                "include_batch_num": (IO.BOOLEAN, {
+                "include_batch_num": ("BOOLEAN", {
                     "default": True,
                     "tooltip": "Include batch numbers in filenames."
                 }),
@@ -209,7 +207,7 @@ class SaveImageWithMetaData(ComfyNodeABC):
         return metadata
 
     @classmethod
-    def gen_pnginfo(cls):
+    def gen_pnginfo(s):
         inputs = Capture.get_inputs()
         trace_tree_from_this_node = Trace.trace(hook.current_save_image_node_id, hook.current_prompt)
         inputs_before_this_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_this_node)
@@ -221,11 +219,11 @@ class SaveImageWithMetaData(ComfyNodeABC):
         return Capture.gen_pnginfo_dict(inputs_before_sampler_node, inputs_before_this_node)
 
     @classmethod
-    def format_filename(cls, filename, pnginfo_dict):
+    def format_filename(s, filename, pnginfo_dict):
         """
         Replaces placeholders in the filename with actual values like date, seed, prompt, etc.
         """
-        result = re.findall(cls.pattern_format, filename)
+        result = re.findall(s.pattern_format, filename)
         
         now = datetime.now()
         date_table = {
@@ -268,14 +266,14 @@ class SaveImageWithMetaData(ComfyNodeABC):
         return filename
 
 
-class CreateExtraMetaData(ComfyNodeABC):
+class CreateExtraMetaData:
     @classmethod
-    def INPUT_TYPES(s) -> InputTypeDict:
+    def INPUT_TYPES(s):
         return {
             "optional": {
                 "extra_metadata": ("EXTRA_METADATA", {"forceInput": True}),
                 **{
-                    f"{type}{i}": (IO.STRING, {"default": "", "multiline": False})
+                    f"{type}{i}": ("STRING", {"default": "", "multiline": False})
                     for i in range(1, 5)
                     for type in ["key", "value"]
                 },
