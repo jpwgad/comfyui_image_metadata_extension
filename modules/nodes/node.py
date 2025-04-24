@@ -102,7 +102,7 @@ class SaveImageWithMetaData:
 
         pnginfo = PngInfo()
         if pnginfo_dict is None:
-            pnginfo_dict = self.gen_pnginfo() if metadata_scope == "full" else {}
+            pnginfo_dict = self.gen_pnginfo(prompt) if metadata_scope == "full" else {}
 
         filename_prefix = self.format_filename(filename_prefix, pnginfo_dict) + self.prefix_append
 
@@ -207,13 +207,14 @@ class SaveImageWithMetaData:
         return metadata
 
     @classmethod
-    def gen_pnginfo(s):
+    def gen_pnginfo(s, prompt):
         inputs = Capture.get_inputs()
-        trace_tree_from_this_node = Trace.trace(hook.current_save_image_node_id, hook.current_prompt)
+        trace_tree_from_this_node = Trace.trace(hook.current_save_image_node_id, prompt)
         inputs_before_this_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_this_node)
 
         sampler_node_id = Trace.find_sampler_node_id(trace_tree_from_this_node)
-        trace_tree_from_sampler_node = Trace.trace(sampler_node_id, hook.current_prompt)
+        trace_tree_from_sampler_node = Trace.trace(sampler_node_id, prompt)
+
         inputs_before_sampler_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_sampler_node)
 
         return Capture.gen_pnginfo_dict(inputs_before_sampler_node, inputs_before_this_node)

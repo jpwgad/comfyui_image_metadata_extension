@@ -1,42 +1,60 @@
 from collections import deque, defaultdict
 from .defs.samplers import SAMPLERS
 
+
 class Trace:
-    @classmethod
-    def trace(cls, start_node_id, prompt):
-        node = prompt.get(start_node_id)
-        class_type = node["class_type"] if node else None
+    _trace_cache = {}
+
+    @staticmethod
+    def _bfs_traverse(start_node_id, prompt, visit_node, edge_condition=None):
         Q = deque([(start_node_id, 0)])
-        trace_tree = {start_node_id: (0, class_type)}
+        visited_nodes = set()
         visited_edges = set()
 
         while Q:
             current_node_id, distance = Q.popleft()
-            node = prompt.get(current_node_id)
-            if not node:
+            if current_node_id in visited_nodes or current_node_id not in prompt:
                 continue
+            visited_nodes.add(current_node_id)
 
-            input_fields = node.get("inputs", {})
-            for value in input_fields.values():
+            node = prompt[current_node_id]
+            visit_node(current_node_id, node, distance)
+
+            for value in node.get("inputs", {}).values():
                 if isinstance(value, list) and value:
-                    nid = value[0]
-                    edge = (current_node_id, nid)
-                    if edge in visited_edges:
+                    next_id = value[0]
+                    edge = (current_node_id, next_id)
+                    if edge in visited_edges or (edge_condition and not edge_condition(current_node_id, next_id)):
                         continue
                     visited_edges.add(edge)
+                    Q.append((next_id, distance + 1))
 
-                    next_node = prompt.get(nid)
-                    if next_node:
-                        class_type = next_node["class_type"]
-                        trace_tree[nid] = (distance + 1, class_type)
-                        Q.append((nid, distance + 1))
+    @classmethod
+    def _compute_trace_signature(cls, start_node_id, prompt):
+        structure = []
+        def collect_structure(nid, node, _):
+            structure.append((nid, node.get("class_type", "")))
+        cls._bfs_traverse(start_node_id, prompt, collect_structure)
+        structure.sort()
+        return hash(tuple(structure))
 
+    @classmethod
+    def trace(cls, start_node_id, prompt):
+        sig = cls._compute_trace_signature(start_node_id, prompt)
+        if sig in cls._trace_cache:
+            return cls._trace_cache[sig]
+
+        trace_tree = {}
+        def build_trace(nid, node, dist):
+            trace_tree[nid] = (dist, node.get("class_type", ""))
+        cls._bfs_traverse(start_node_id, prompt, build_trace)
+        cls._trace_cache[sig] = trace_tree
         return trace_tree
 
     @classmethod
     def find_node_by_class_types(cls, trace_tree, class_type_set, node_id=None):
         if node_id:
-            node = trace_tree.get(str(node_id))
+            node = trace_tree.get(node_id)
             if node and node[1] in class_type_set:
                 return node_id
         else:
@@ -46,15 +64,17 @@ class Trace:
         return None
 
     @classmethod
+    def find_node_with_any_fields(cls, prompt, required_fields):
+        for node_id, node in prompt.items():
+            if required_fields & set(node.get("inputs", {}).keys()):
+                return node_id, node
+        return None, None
+
+    @classmethod
     def find_sampler_node_id(cls, trace_tree):
-        sampler = cls.find_node_by_class_types(
-            trace_tree,
-            set(SAMPLERS.keys()),
-        )
-
-        if sampler:
-            return sampler
-
+        node = cls.find_node_by_class_types(trace_tree, set(SAMPLERS.keys()))
+        if node:
+            return node
         raise ValueError("Could not find a sampler node in the trace tree.")
 
     @classmethod
