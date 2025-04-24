@@ -20,20 +20,20 @@ def calc_hash_for_type(folder_type, model_name):
         return ""  # Return empty string if unable to calculate hash
 
 # Replacing calc_model_hash, calc_vae_hash, calc_lora_hash, and calc_unet_hash
-def calc_model_hash(model_name, input_data):
+def calc_model_hash(model_name, input_data=None):
     return calc_hash_for_type("checkpoints", model_name)
 
-def calc_vae_hash(model_name, input_data):
+def calc_vae_hash(model_name, input_data=None):
     return calc_hash_for_type("vae", model_name)
 
-def calc_lora_hash(model_name, input_data):
+def calc_lora_hash(model_name, input_data=None):
     return calc_hash_for_type("loras", model_name)
 
-def calc_unet_hash(model_name, input_data):
+def calc_unet_hash(model_name, input_data=None):
     return calc_hash_for_type("unet", model_name)
 
 
-def convert_skip_clip(stop_at_clip_layer, input_data):
+def convert_skip_clip(stop_at_clip_layer, input_data=None):
     return stop_at_clip_layer * -1
 
 
@@ -62,7 +62,7 @@ def _extract_embedding_names_from_text(text):
 
     return embedding_names
 
-def extract_embedding_names(text, clip):
+def extract_embedding_names(text, clip=None):
     return _extract_embedding_names_from_text(text)
 
 def extract_embedding_hashes(text, input_data):
