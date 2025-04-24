@@ -111,75 +111,88 @@ class Capture:
     def gen_pnginfo_dict(cls, inputs_before_sampler_node, inputs_before_this_node, save_civitai_sampler=True):
         pnginfo_dict = {}
 
-        def update_pnginfo_dict(inputs, metafield, key):
-            x = inputs.get(metafield, [])
-            if x:
-                value = x[0][1]
-                
-                # Only add non-empty values for other fields
-                if value is not None and value != "":
-                    pnginfo_dict[key] = value
-                    return value  # Return the value that was set
-            
-            return None  # Return None if no value was set or value is empty
+        # Prompts
+        cls.update_fields(inputs_before_sampler_node, pnginfo_dict, [
+            (MetaField.POSITIVE_PROMPT, "Positive prompt"),
+            (MetaField.NEGATIVE_PROMPT, "Negative prompt"),
+        ])
+        cls.append_lora_models(inputs_before_sampler_node, pnginfo_dict)
 
-        
-        positive_prompt = ""
-        positive_prompt += update_pnginfo_dict(inputs_before_sampler_node, MetaField.POSITIVE_PROMPT, "Positive prompt")
+        # Basic metadata
+        cls.update_fields(inputs_before_sampler_node, pnginfo_dict, [
+            (MetaField.STEPS, "Steps"),
+            (MetaField.CFG, "CFG scale"),
+            (MetaField.SEED, "Seed"),
+            (MetaField.CLIP_SKIP, "Clip skip"),
+            (MetaField.MODEL_NAME, "Model"),
+            (MetaField.MODEL_HASH, "Model hash"),
+        ])
 
-        # Get Lora strings and hashes
-        lora_strings, lora_hashes_string = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
-
-        # Append Lora models to the positive prompt, which is required for the Civitai website to parse and apply Lora weights.
-        # Format: <lora:Lora_Model_Name:weight_value>. Example: <lora:Lora_Name_00:0.6> <lora:Lora_Name_01:0.8>
-        if lora_strings:
-            positive_prompt += " " + " ".join(lora_strings)
-
-        pnginfo_dict["Positive prompt"] = positive_prompt.strip()
-        update_pnginfo_dict(inputs_before_sampler_node, MetaField.NEGATIVE_PROMPT, "Negative prompt")
-
-        update_pnginfo_dict(inputs_before_sampler_node, MetaField.STEPS, "Steps")
-
-        sampler_names = inputs_before_sampler_node.get(MetaField.SAMPLER_NAME, [])
-        schedulers = inputs_before_sampler_node.get(MetaField.SCHEDULER, [])
-
+        # Sampler & Scheduler
         if save_civitai_sampler:
-            pnginfo_dict["Sampler"] = cls.get_sampler_for_civitai(sampler_names, schedulers)
+            sampler = cls.get_sampler_for_civitai(
+                inputs_before_sampler_node.get(MetaField.SAMPLER_NAME, []),
+                inputs_before_sampler_node.get(MetaField.SCHEDULER, [])
+            )
         else:
-            if sampler_names:
-                pnginfo_dict["Sampler"] = sampler_names[0][1]
-                if schedulers:
-                    scheduler = schedulers[0][1]
-                    if scheduler != "normal":
-                        pnginfo_dict["Sampler"] += "_" + scheduler
+            sampler = inputs_before_sampler_node.get(MetaField.SAMPLER_NAME, [[None, ""]])[0][1]
+            scheduler = inputs_before_sampler_node.get(MetaField.SCHEDULER, [[None, ""]])[0][1]
+            if scheduler and scheduler != "normal":
+                sampler += f"_{scheduler}"
+        pnginfo_dict["Sampler"] = sampler
 
-        update_pnginfo_dict(inputs_before_sampler_node, MetaField.CFG, "CFG scale")
-        update_pnginfo_dict(inputs_before_sampler_node, MetaField.SEED, "Seed")
-        update_pnginfo_dict(inputs_before_sampler_node, MetaField.CLIP_SKIP, "Clip skip")
+        # Image size
+        w = cls._val(inputs_before_sampler_node, MetaField.IMAGE_WIDTH)
+        h = cls._val(inputs_before_sampler_node, MetaField.IMAGE_HEIGHT)
+        if w and h:
+            pnginfo_dict["Size"] = f"{w}x{h}"
 
-        image_widths = inputs_before_sampler_node.get(MetaField.IMAGE_WIDTH, [])
-        image_heights = inputs_before_sampler_node.get(MetaField.IMAGE_HEIGHT, [])
-        if image_widths and image_heights:
-            pnginfo_dict["Size"] = f"{image_widths[0][1]}x{image_heights[0][1]}"
-
-        update_pnginfo_dict(inputs_before_sampler_node, MetaField.MODEL_NAME, "Model")
-        update_pnginfo_dict(inputs_before_sampler_node, MetaField.MODEL_HASH, "Model hash")
-        update_pnginfo_dict(inputs_before_this_node, MetaField.VAE_NAME, "VAE")
-        update_pnginfo_dict(inputs_before_this_node, MetaField.VAE_HASH, "VAE hash")
+        # VAE info
+        cls._update(inputs_before_this_node, pnginfo_dict, MetaField.VAE_NAME, "VAE")
+        cls._update(inputs_before_this_node, pnginfo_dict, MetaField.VAE_HASH, "VAE hash")
 
         # Add Lora hashes, based on https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/82a973c04367123ae98bd9abdf80d9eda9b910e2/extensions-builtin/Lora/scripts/lora_script.py#L78
-        if lora_hashes_string:
-            pnginfo_dict["Lora hashes"] = f'"{lora_hashes_string}"'
+        _, lora_hashes = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
+        if lora_hashes:
+            pnginfo_dict["Lora hashes"] = f'"{lora_hashes}"'
 
+        # LoRA & embeddings detailed info
         pnginfo_dict.update(cls.gen_loras(inputs_before_sampler_node))
         pnginfo_dict.update(cls.gen_embeddings(inputs_before_sampler_node))
 
-        hashes_for_civitai = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
-        if len(hashes_for_civitai) > 0:
-            pnginfo_dict["Hashes"] = json.dumps(hashes_for_civitai)
+        # Civitai hash data
+        civitai_hashes = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
+        if civitai_hashes:
+            pnginfo_dict["Hashes"] = json.dumps(civitai_hashes)
 
         return pnginfo_dict
 
+    @classmethod
+    def update_fields(cls, inputs, target_dict, metafield_pairs):
+        for key, label in metafield_pairs:
+            value = cls._val(inputs, key)
+            if value:
+                target_dict[label] = value
+
+    @classmethod
+    def _update(cls, inputs, target, meta_key, label):
+        val = cls._val(inputs, meta_key)
+        if val:
+            target[label] = val
+
+    @staticmethod
+    def _val(inputs, key):
+        return inputs.get(key, [[None, None]])[0][1]
+
+    @classmethod
+    def append_lora_models(cls, inputs, pnginfo_dict):
+        prompt = pnginfo_dict.get("Positive prompt", "")
+        
+        # Append Lora models to the positive prompt, which is required for the Civitai website to parse and apply Lora weights.
+        # Format: <lora:Lora_Model_Name:weight_value>. Example: <lora:Lora_Name_00:0.6> <lora:Lora_Name_01:0.8>
+        lora_strings, _ = cls.get_lora_strings_and_hashes(inputs)
+        if lora_strings:
+            pnginfo_dict["Positive prompt"] = (prompt + " " + " ".join(lora_strings)).strip()
 
 
     @classmethod
@@ -205,50 +218,58 @@ class Capture:
 
     @classmethod
     def gen_parameters_str(cls, pnginfo_dict):
-        def clean_value(value):
-            if value is None:
-                return ""
-            value = str(value).strip()
-            return value.replace("\n", " ")
+        def clean(value):
+            return str(value).strip().replace("\n", " ") if value else ""
 
-        cleaned_dict = {k: clean_value(v) for k, v in pnginfo_dict.items()}
+        cleaned = {k: clean(v) for k, v in pnginfo_dict.items()}
+        parts = [cleaned.get("Positive prompt", "")]
 
-        result = [cleaned_dict.get("Positive prompt", "")]
-        negative_prompt = cleaned_dict.get("Negative prompt")
-        if negative_prompt:
-            result.append(f"Negative prompt: {negative_prompt}")
+        if neg := cleaned.get("Negative prompt"):
+            parts.append(f"Negative prompt: {neg}")
 
-        s_list = [
-            f"{k}: {v}"
-            for k, v in cleaned_dict.items() 
-            if k not in {"Positive prompt", "Negative prompt"} and v not in {None, ""}
+        extras = [
+            f"{k}: {v}" for k, v in cleaned.items()
+            if k not in {"Positive prompt", "Negative prompt"} and v
         ]
+        if extras:
+            parts.append(", ".join(extras))
 
-        result.append(", ".join(s_list))
-        return "\n".join(result)
+        return "\n".join(parts)
 
     @classmethod
     def get_hashes_for_civitai(cls, inputs_before_sampler_node, inputs_before_this_node):
+        def extract_single(inputs, key):
+            items = inputs.get(key, [])
+            return items[0][1] if items and len(items[0]) > 1 else None
+
+        def extract_named_hashes(names, hashes, prefix):
+            result = {}
+            for name, h in zip(names, hashes):
+                base_name = os.path.splitext(os.path.basename(name[1]))[0]
+                result[f"{prefix}:{base_name}"] = h[1]
+            return result
+
         resource_hashes = {}
-        model_hashes = inputs_before_sampler_node.get(MetaField.MODEL_HASH, [])
-        if model_hashes:
-            resource_hashes["model"] = model_hashes[0][1]
 
-        vae_hashes = inputs_before_this_node.get(MetaField.VAE_HASH, [])
-        if vae_hashes:
-            resource_hashes["vae"] = vae_hashes[0][1]
+        model = extract_single(inputs_before_sampler_node, MetaField.MODEL_HASH)
+        if model:
+            resource_hashes["model"] = model
 
-        lora_model_names = inputs_before_sampler_node.get(MetaField.LORA_MODEL_NAME, [])
-        lora_model_hashes = inputs_before_sampler_node.get(MetaField.LORA_MODEL_HASH, [])
-        for lora_model_name, lora_model_hash in zip(lora_model_names, lora_model_hashes):
-            lora_model_name = os.path.splitext(os.path.basename(lora_model_name[1]))[0]
-            resource_hashes[f"lora:{lora_model_name}"] = lora_model_hash[1]
+        vae = extract_single(inputs_before_this_node, MetaField.VAE_HASH)
+        if vae:
+            resource_hashes["vae"] = vae
 
-        embedding_names = inputs_before_sampler_node.get(MetaField.EMBEDDING_NAME, [])
-        embedding_hashes = inputs_before_sampler_node.get(MetaField.EMBEDDING_HASH, [])
-        for embedding_name, embedding_hash in zip(embedding_names, embedding_hashes):
-            embedding_name = os.path.splitext(os.path.basename(embedding_name[1]))[0]
-            resource_hashes[f"embed:{embedding_name}"] = embedding_hash[1]
+        resource_hashes.update(extract_named_hashes(
+            inputs_before_sampler_node.get(MetaField.LORA_MODEL_NAME, []),
+            inputs_before_sampler_node.get(MetaField.LORA_MODEL_HASH, []),
+            "lora"
+        ))
+
+        resource_hashes.update(extract_named_hashes(
+            inputs_before_sampler_node.get(MetaField.EMBEDDING_NAME, []),
+            inputs_before_sampler_node.get(MetaField.EMBEDDING_HASH, []),
+            "embed"
+        ))
 
         return resource_hashes
 
