@@ -128,6 +128,19 @@ class Capture:
             (MetaField.MODEL_HASH, "Model hash"),
         ])
 
+        # Check if Denoise is less than 1.0 and add if so
+        denoise_value = cls._val(inputs_before_sampler_node, MetaField.DENOISE)
+        if denoise_value and float(denoise_value) < 1.0:
+            pnginfo_dict["Denoising strength"] = denoise_value
+
+        # Check for 'Hires upscale' or 'Hires upscaler' and always add Denoise field
+        hires_upscale = cls._val(inputs_before_this_node, MetaField.UPSCALE_BY)
+        hires_upscaler = cls._val(inputs_before_this_node, MetaField.UPSCALE_MODEL_NAME)
+
+        if hires_upscale or hires_upscaler:
+            if denoise_value:
+                pnginfo_dict["Denoising strength"] = denoise_value
+
         # Sampler & Scheduler
         if save_civitai_sampler:
             sampler = cls.get_sampler_for_civitai(
@@ -150,7 +163,11 @@ class Capture:
         # VAE info
         cls._update(inputs_before_this_node, pnginfo_dict, MetaField.VAE_NAME, "VAE")
         cls._update(inputs_before_this_node, pnginfo_dict, MetaField.VAE_HASH, "VAE hash")
-
+        
+        # Add Hi-Res, based on https://github.com/civitai/civitai/blob/0c6a61b2d3ee341e77a357d4c08cf220e22b1190/src/server/common/model-helpers.ts#L33
+        cls._update(inputs_before_this_node, pnginfo_dict, MetaField.UPSCALE_BY, "Hires upscale")
+        cls._update(inputs_before_this_node, pnginfo_dict, MetaField.UPSCALE_MODEL_NAME, "Hires upscaler")
+        
         # Add Lora hashes, based on https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/82a973c04367123ae98bd9abdf80d9eda9b910e2/extensions-builtin/Lora/scripts/lora_script.py#L78
         _, lora_hashes = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
         if lora_hashes:
@@ -162,6 +179,7 @@ class Capture:
 
         # Civitai hash data
         civitai_hashes = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
+
         if civitai_hashes:
             pnginfo_dict["Hashes"] = json.dumps(civitai_hashes)
 
@@ -258,6 +276,10 @@ class Capture:
         vae = extract_single(inputs_before_this_node, MetaField.VAE_HASH)
         if vae:
             resource_hashes["vae"] = vae
+            
+        upscaler_hash = extract_single(inputs_before_this_node, MetaField.UPSCALE_MODEL_HASH)
+        if upscaler_hash:
+            resource_hashes["upscaler"] = upscaler_hash
 
         resource_hashes.update(extract_named_hashes(
             inputs_before_sampler_node.get(MetaField.LORA_MODEL_NAME, []),

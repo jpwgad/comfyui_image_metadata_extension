@@ -32,6 +32,9 @@ def calc_lora_hash(model_name, input_data=None):
 def calc_unet_hash(model_name, input_data=None):
     return calc_hash_for_type("unet", model_name)
 
+def calc_upscale_hash(model_name, input_data=None):
+    return calc_hash_for_type("upscale_models", model_name)
+
 
 def convert_skip_clip(stop_at_clip_layer, input_data=None):
     return stop_at_clip_layer * -1

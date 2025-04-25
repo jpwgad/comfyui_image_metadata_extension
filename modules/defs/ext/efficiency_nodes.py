@@ -90,6 +90,7 @@ CAPTURE_FIELD_LIST = {
         MetaField.CFG: {"field_name": "cfg"},
         MetaField.SAMPLER_NAME: {"field_name": "sampler_name"},
         MetaField.SCHEDULER: {"field_name": "scheduler"},
+        MetaField.DENOISE: {"field_name": "denoise"},
     },
     "KSampler Adv. (Efficient)": {
         MetaField.SEED: {"field_name": "noise_seed"},

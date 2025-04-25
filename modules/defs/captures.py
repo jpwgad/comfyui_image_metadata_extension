@@ -2,6 +2,7 @@ from .meta import MetaField
 from .validators import is_positive_prompt, is_negative_prompt
 from .formatters import (
     calc_model_hash,
+    calc_upscale_hash,
     calc_vae_hash,
     calc_lora_hash,
     calc_unet_hash,
@@ -56,6 +57,7 @@ CAPTURE_FIELD_LIST = {
         MetaField.CFG: {"field_name": "cfg"},
         MetaField.SAMPLER_NAME: {"field_name": "sampler_name"},
         MetaField.SCHEDULER: {"field_name": "scheduler"},
+        MetaField.DENOISE: {"field_name": "denoise"},
     },
     "KSamplerAdvanced": {
         MetaField.SEED: {"field_name": "noise_seed"},
@@ -93,6 +95,16 @@ CAPTURE_FIELD_LIST = {
         MetaField.LORA_STRENGTH_MODEL: {"field_name": "strength_model"},
         MetaField.LORA_STRENGTH_CLIP: {"value": 0},
     },
+    "UpscaleModelLoader": {
+        MetaField.UPSCALE_MODEL_NAME: {"field_name": "model_name"},
+        MetaField.UPSCALE_MODEL_HASH: {
+            "field_name": "model_name",
+            "format": calc_upscale_hash,
+        },
+    },
+    "ImageScaleBy": {
+        MetaField.UPSCALE_BY: {"field_name": "scale_by"},
+    },
     # Flux - https://comfyanonymous.github.io/ComfyUI_examples/flux/
     "UNETLoader": {
         MetaField.MODEL_NAME: {"field_name": "unet_name"},
@@ -104,6 +116,7 @@ CAPTURE_FIELD_LIST = {
     "BasicScheduler": {
         MetaField.STEPS: {"field_name": "steps"},
         MetaField.SCHEDULER: {"field_name": "scheduler"},
+        MetaField.DENOISE: {"field_name": "denoise"},
     },
     "KSamplerSelect": {
         MetaField.SAMPLER_NAME: {"field_name": "sampler_name"},

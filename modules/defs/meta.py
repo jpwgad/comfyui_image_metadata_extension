@@ -14,6 +14,7 @@ class MetaField(IntEnum):
     CFG = 22
     SAMPLER_NAME = 23
     SCHEDULER = 24
+    DENOISE = 26
     IMAGE_WIDTH = 30
     IMAGE_HEIGHT = 31
     EMBEDDING_NAME = 40
@@ -22,3 +23,6 @@ class MetaField(IntEnum):
     LORA_MODEL_HASH = 51
     LORA_STRENGTH_MODEL = 52
     LORA_STRENGTH_CLIP = 53
+    UPSCALE_MODEL_NAME = 80
+    UPSCALE_MODEL_HASH = 81
+    UPSCALE_BY = 83
