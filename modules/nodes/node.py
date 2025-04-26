@@ -9,6 +9,7 @@ import piexif
 import piexif.helper
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
+from enum import Enum
 
 import folder_paths
 
@@ -17,14 +18,35 @@ from ..capture import Capture
 from ..trace import Trace
 
 
+class OutputFormat(str, Enum):
+    PNG = "png"
+    PNG_JSON = "png_with_json"
+    JPG = "jpg"
+    JPG_JSON = "jpg_with_json"
+    WEBP = "webp"
+    WEBP_JSON = "webp_with_json"
+
+
+class QualityOption(str, Enum):
+    MAX = "max"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class MetadataScope(str, Enum):
+    FULL = "full"
+    DEFAULT = "default"
+    WORKFLOW_ONLY = "workflow_only"
+    NONE = "none"
+
+
 # refer. https://github.com/comfyanonymous/ComfyUI/blob/38b7ac6e269e6ecc5bdd6fefdfb2fb1185b09c9d/nodes.py#L1411
 class SaveImageWithMetaData:
-    OUTPUT_FORMATS = [
-        "png", "png_with_json", "jpg", "jpg_with_json", "webp", "webp_with_json"
-    ]
-    QUALITY_OPTIONS = ["max", "high", "medium", "low"]
-    METADATA_OPTIONS = ["full", "default", "workflow_only", "none"]
-    
+    OUTPUT_FORMATS = [e for e in OutputFormat]
+    QUALITY_OPTIONS = [e for e in QualityOption]
+    METADATA_OPTIONS = [e for e in MetadataScope]
+
     def __init__(self):
         self.output_dir = folder_paths.get_output_directory()
         self.type = "output"
@@ -50,10 +72,10 @@ class SaveImageWithMetaData:
             },
             "optional": {
                 "extra_metadata": ("EXTRA_METADATA", {
-                    "tooltip": "Additional metadata to be included with the saved image. This can contain key-value pairs for extra information."
+                    "tooltip": "Additional key-value metadata to include in the image."
                 }),
                 "quality": (s.QUALITY_OPTIONS, {
-                    "tooltip": "Quality levels:"
+                    "tooltip": "Image quality:"
                             "\n'max' / 'lossless WebP' - 100"
                             "\n'high' - 80"
                             "\n'medium' - 60"
@@ -69,7 +91,7 @@ class SaveImageWithMetaData:
                 }),
                 "include_batch_num": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Include batch numbers in filenames."
+                    "tooltip": "Include batch number in filename."
                 }),
             },
             "hidden": {
@@ -84,25 +106,42 @@ class SaveImageWithMetaData:
     DESCRIPTION = "Saves the input images with metadata to your ComfyUI output directory."
     CATEGORY = "SaveImage"
 
-    pattern_format = re.compile(r"(%[^%]+%)")
-    
-    def parse_output_format(self, output_format):
-        save_workflow_json = output_format.endswith("_with_json")
-        base_format = output_format.replace("_with_json", "")
+    pattern_format = re.compile(r"(%[^%]+%)") # Pattern to match mask values in the filename
+
+    def parse_output_format(self, output_format: str):
+        fmt = OutputFormat(output_format)
+        save_workflow_json = fmt.name.endswith("JSON")
+        base_format = fmt.replace("_with_json", "")
         return base_format, save_workflow_json
+
+    def get_quality_value(self, quality: str) -> int:
+        return {
+            QualityOption.MAX: 100,
+            QualityOption.HIGH: 80,
+            QualityOption.MEDIUM: 60,
+            QualityOption.LOW: 30
+        }.get(quality, 100)
+
+    def find_next_available_filename(self, folder: str, name: str, ext: str):
+        """
+        Finds the next available filename by checking existing files in the directory.
+        """
+        existing = {f.stem for f in Path(folder).glob(f"{name}_*.{ext}")}
+        i = 1
+        while f"{name}_{i}" in existing:
+            i += 1
+        return f"{name}_{i}.{ext}"
 
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
                     extra_pnginfo=None, extra_metadata=None, output_format="png",
-                    quality=100, metadata_scope="full",
+                    quality="max", metadata_scope="full",
                     include_batch_num=True, pnginfo_dict=None):
-        if extra_metadata is None:
-            extra_metadata = {}
 
+        extra_metadata = extra_metadata or {}
         base_format, save_workflow_json = self.parse_output_format(output_format)
-
         pnginfo = PngInfo()
         if pnginfo_dict is None:
-            pnginfo_dict = self.gen_pnginfo(prompt) if metadata_scope == "full" else {}
+            pnginfo_dict = self.gen_pnginfo(prompt) if metadata_scope == MetadataScope.FULL else {}
 
         filename_prefix = self.format_filename(filename_prefix, pnginfo_dict) + self.prefix_append
 
@@ -166,19 +205,6 @@ class SaveImageWithMetaData:
                     json.dump(extra_pnginfo["workflow"], f)
 
         return {"ui": {"images": results}}
-
-    def find_next_available_filename(self, full_output_folder, filename, base_format):
-        """
-        Finds the next available filename by checking existing files in the directory.
-        """
-        existing_files = {f.stem for f in Path(full_output_folder).glob(f"{filename}_*.{base_format}")}
-        counter = 1
-        while f"{filename}_{counter}" in existing_files:
-            counter += 1
-        return f"{filename}_{counter}.{base_format}"
-
-    def get_quality_value(self, quality):
-        return {"max": 100, "high": 80, "medium": 60, "low": 30}.get(quality, 100)
 
     def prepare_pnginfo(self, metadata, pnginfo_dict, batch_number, total_images, prompt, extra_pnginfo, metadata_scope):
         """
