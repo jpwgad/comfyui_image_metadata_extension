@@ -130,8 +130,8 @@ class Capture:
 
         # Check if Denoise is less than 1.0 and add if so
         denoise_value = cls._val(inputs_before_sampler_node, MetaField.DENOISE)
-        if denoise_value and float(denoise_value) < 1.0:
-            pnginfo_dict["Denoising strength"] = denoise_value
+        if denoise_value and 0 < float(denoise_value) < 1:
+            pnginfo_dict["Denoising strength"] = float(denoise_value)
 
         # Check for 'Hires upscale' or 'Hires upscaler' and always add Denoise field
         hires_upscale = cls._val(inputs_before_this_node, MetaField.UPSCALE_BY)
@@ -152,7 +152,9 @@ class Capture:
             scheduler = inputs_before_sampler_node.get(MetaField.SCHEDULER, [[None, ""]])[0][1]
             if scheduler and scheduler != "normal":
                 sampler += f"_{scheduler}"
-        pnginfo_dict["Sampler"] = sampler
+
+        if sampler:
+            pnginfo_dict["Sampler"] = sampler
 
         # Image size
         w = cls._val(inputs_before_sampler_node, MetaField.IMAGE_WIDTH)
@@ -336,6 +338,8 @@ class Capture:
             'lcm': 'LCM'
         }
 
+        sampler = None
+        scheduler = None
         # Get the sampler and scheduler values
         if len(sampler_names) > 0:
             sampler = sampler_names[0][1]
@@ -352,6 +356,9 @@ class Capture:
             else:
                 return f"{sampler_name}_{scheduler}"
 
+        if not sampler:
+            return None
+    
         if sampler in sampler_dict:
             return get_scheduler_name(sampler_dict[sampler], scheduler)
 
