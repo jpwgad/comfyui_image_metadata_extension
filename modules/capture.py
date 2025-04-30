@@ -172,7 +172,7 @@ class Capture:
         # Image size
         image_width = inputs_before_sampler_node.get(MetaField.IMAGE_WIDTH, [[None]])[0][1]
         image_height = inputs_before_sampler_node.get(MetaField.IMAGE_HEIGHT, [[None]])[0][1]
-        if image_width and image_height:
+        if isinstance(image_width, int) and isinstance(image_height, int) and image_width > 0 and image_height > 0:
             pnginfo_dict["Size"] = f"{image_width}x{image_height}"
 
         update_field(inputs_before_sampler_node, MetaField.MODEL_NAME, "Model")
