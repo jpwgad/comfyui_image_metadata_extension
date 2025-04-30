@@ -83,8 +83,7 @@ class Trace:
         node = cls.find_node_by_class_types(trace_tree, set(SAMPLERS.keys()))
         if node:
             return node
-        # raise ValueError("Could not find a sampler node in the trace tree.")
-        print("Could not find a sampler node in the trace tree.")
+        print("[ComfyUI Image Metadata Extension] WARNING: Could not find a sampler node in the trace tree!")
 
     @classmethod
     def filter_inputs_by_trace_tree(cls, inputs, trace_tree):

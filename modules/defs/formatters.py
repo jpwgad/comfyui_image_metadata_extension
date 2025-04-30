@@ -97,6 +97,8 @@ def _extract_embedding_names(text, input_data):
     if not clip or not hasattr(clip, "embedding_directory"):
         return [], None
 
+    text = ''.join(text)
+    
     # Extract embedding names
     embedding_names = set(_extract_embedding_names_from_text(text))
 

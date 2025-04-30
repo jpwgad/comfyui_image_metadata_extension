@@ -109,59 +109,108 @@ class Capture:
     def gen_pnginfo_dict(cls, inputs_before_sampler_node, inputs_before_this_node, prompt, save_civitai_sampler=True):
         pnginfo_dict = {}
 
+        # Collect all metadata if sampler node missing
         if not inputs_before_sampler_node:
             inputs_before_sampler_node = defaultdict(list)
             cls._collect_all_metadata(prompt, inputs_before_sampler_node)
 
-        def update_field(field, label):
-            val = cls._val(inputs_before_sampler_node, field)
-            if val:
-                pnginfo_dict[label] = val
+        # Helper function to update PNG info with a single field
+        def update_field(inputs, metafield, key):
+            # Get the list for the field
+            values = inputs.get(metafield, [])
+            
+            # Check if the list is not empty and the first item has a second element
+            if values and len(values[0]) > 1:
+                value = values[0][1]
+            else:
+                value = None
+            
+            # If value is not None or empty, update the pnginfo_dict
+            if value not in [None, ""]:
+                pnginfo_dict[key] = value
+            return value  # Return the value (or None)
 
-        update_field(MetaField.POSITIVE_PROMPT, "Positive prompt")
-        update_field(MetaField.NEGATIVE_PROMPT, "Negative prompt")
-        cls.append_lora_models(inputs_before_sampler_node, pnginfo_dict)
+        # Update main fields
+        positive_prompt = update_field(inputs_before_sampler_node, MetaField.POSITIVE_PROMPT, "Positive prompt")
+        if positive_prompt is None:
+            positive_prompt = ""
+            print("[ComfyUI Image Metadata Extension] WARNING: Positive prompt is empty!")
 
-        sampler = cls._resolve_sampler_string(inputs_before_sampler_node, save_civitai_sampler)
-        if sampler:
-            pnginfo_dict["Sampler"] = sampler
+        negative_prompt = update_field(inputs_before_sampler_node, MetaField.NEGATIVE_PROMPT, "Negative prompt")
+        if negative_prompt is None:
+            negative_prompt = ""
+            print("[ComfyUI Image Metadata Extension] WARNING: Negative prompt is empty!")
 
-        update_field(MetaField.MODEL_NAME, "Model")
-        update_field(MetaField.MODEL_HASH, "Model hash")
-        update_field(MetaField.STEPS, "Steps")
-        update_field(MetaField.CFG, "CFG scale")
-        update_field(MetaField.SEED, "Seed")
-        update_field(MetaField.CLIP_SKIP, "Clip skip")
+        lora_strings, lora_hashes_string = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
 
-        cls._add_denoising_strength(inputs_before_sampler_node, inputs_before_this_node, pnginfo_dict)
+        # Append Lora models to the positive prompt, which is required for the Civitai website to parse and apply Lora weights.
+        # Format: <lora:Lora_Model_Name:weight_value>. Example: <lora:Lora_Name_00:0.6> <lora:Lora_Name_01:0.8>
+        if lora_strings:
+            positive_prompt += " " + " ".join(lora_strings)
 
-        w = cls._val(inputs_before_sampler_node, MetaField.IMAGE_WIDTH)
-        h = cls._val(inputs_before_sampler_node, MetaField.IMAGE_HEIGHT)
-        if w and h:
-            pnginfo_dict["Size"] = f"{w}x{h}"
-
-        # VAE info
-        update_field(MetaField.VAE_NAME, "VAE")
-        update_field(MetaField.VAE_HASH, "VAE hash")
+        pnginfo_dict["Positive prompt"] = positive_prompt.strip()
+        pnginfo_dict["Negative prompt"] = negative_prompt.strip()
         
-        # Add Hi-Res, based on https://github.com/civitai/civitai/blob/0c6a61b2d3ee341e77a357d4c08cf220e22b1190/src/server/common/model-helpers.ts#L33
-        update_field(MetaField.UPSCALE_BY, "Hires upscale")
-        update_field(MetaField.UPSCALE_MODEL_NAME, "Hires upscaler")
+        update_field(inputs_before_sampler_node, MetaField.STEPS, "Steps")
 
+        # Sampler and Scheduler handling
+        sampler_names = inputs_before_sampler_node.get(MetaField.SAMPLER_NAME, [])
+        schedulers = inputs_before_sampler_node.get(MetaField.SCHEDULER, [])
+        if save_civitai_sampler:
+            pnginfo_dict["Sampler"] = cls.get_sampler_for_civitai(sampler_names, schedulers)
+        else:
+            if sampler_names:
+                pnginfo_dict["Sampler"] = sampler_names[0][1]
+                if schedulers and schedulers[0][1] != "normal":
+                    pnginfo_dict["Sampler"] += f"_{schedulers[0][1]}"
+
+        # Additional fields
+        update_field(inputs_before_sampler_node, MetaField.CFG, "CFG scale")
+        update_field(inputs_before_sampler_node, MetaField.SEED, "Seed")
+        update_field(inputs_before_sampler_node, MetaField.CLIP_SKIP, "Clip skip")
+
+        # Image size
+        image_width = inputs_before_sampler_node.get(MetaField.IMAGE_WIDTH, [[None]])[0][1]
+        image_height = inputs_before_sampler_node.get(MetaField.IMAGE_HEIGHT, [[None]])[0][1]
+        if image_width and image_height:
+            pnginfo_dict["Size"] = f"{image_width}x{image_height}"
+
+        update_field(inputs_before_sampler_node, MetaField.MODEL_NAME, "Model")
+        update_field(inputs_before_sampler_node, MetaField.MODEL_HASH, "Model hash")
+        update_field(inputs_before_this_node, MetaField.VAE_NAME, "VAE")
+        update_field(inputs_before_this_node, MetaField.VAE_HASH, "VAE hash")
+
+        # Handle Denoising Strength
+        denoise_value = inputs_before_sampler_node.get(MetaField.DENOISE, [])
+        if denoise_value:
+            denoise_value = denoise_value[0][1] if isinstance(denoise_value[0], (tuple, list)) else denoise_value[0]
+            if 0 < float(denoise_value) < 1:
+                pnginfo_dict["Denoising strength"] = float(denoise_value)
+
+        # Check for 'Hires upscale' or 'Hires upscaler'
+        hires_upscale = inputs_before_this_node.get(MetaField.UPSCALE_BY, [])
+        hires_upscaler = inputs_before_this_node.get(MetaField.UPSCALE_MODEL_NAME, [])
+        if hires_upscale or hires_upscaler:
+            pnginfo_dict["Denoising strength"] = denoise_value or 1.0 # if 'Hires upscale' or 'Hires upscaler' always add Denoise field
+
+        # Add Hi-Res, based on https://github.com/civitai/civitai/blob/0c6a61b2d3ee341e77a357d4c08cf220e22b1190/src/server/common/model-helpers.ts#L33
+        update_field(inputs_before_this_node, MetaField.UPSCALE_BY, "Hires upscale")
+        update_field(inputs_before_this_node, MetaField.UPSCALE_MODEL_NAME, "Hires upscaler")
+
+        # Add Lora hashes, based on https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/82a973c04367123ae98bd9abdf80d9eda9b910e2/extensions-builtin/Lora/scripts/lora_script.py#L78
+        if lora_hashes_string:
+            pnginfo_dict["Lora hashes"] = f'"{lora_hashes_string}"'
+
+        # Update with Lora and Embeddings
         pnginfo_dict.update(cls.gen_loras(inputs_before_sampler_node))
         pnginfo_dict.update(cls.gen_embeddings(inputs_before_sampler_node))
 
-        # Add Lora hashes, based on https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/82a973c04367123ae98bd9abdf80d9eda9b910e2/extensions-builtin/Lora/scripts/lora_script.py#L78
-        _, lora_hashes = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
-        if lora_hashes:
-            pnginfo_dict["Lora hashes"] = f'"{lora_hashes}"'
-
-        hashes = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
-        if hashes:
-            pnginfo_dict["Hashes"] = json.dumps(hashes)
+        # Add model hashes
+        hashes_for_civitai = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
+        if hashes_for_civitai:
+            pnginfo_dict["Hashes"] = json.dumps(hashes_for_civitai)
 
         return pnginfo_dict
-
 
     @classmethod
     def _collect_all_metadata(cls, prompt, result_dict):
@@ -253,43 +302,6 @@ class Capture:
                             result_dict[meta].append((ref[0], text, 0))
 
     @classmethod
-    def _add_denoising_strength(cls, sampler_inputs, this_inputs, pnginfo_dict):
-        denoise = cls._val(sampler_inputs, MetaField.DENOISE)
-        if denoise and 0 < float(denoise) < 1:
-            pnginfo_dict["Denoising strength"] = float(denoise)
-        if cls._val(this_inputs, MetaField.UPSCALE_BY) or cls._val(this_inputs, MetaField.UPSCALE_MODEL_NAME):
-            if denoise:
-                pnginfo_dict["Denoising strength"] = denoise
-
-    @classmethod
-    def _resolve_sampler_string(cls, inputs, save_for_civitai):
-        if save_for_civitai:
-            return cls.get_sampler_for_civitai(
-                inputs.get(MetaField.SAMPLER_NAME, []),
-                inputs.get(MetaField.SCHEDULER, [])
-            )
-        sampler = cls._val(inputs, MetaField.SAMPLER_NAME) or ""
-        scheduler = cls._val(inputs, MetaField.SCHEDULER)
-        if scheduler and scheduler != "normal":
-            sampler += f"_{scheduler}"
-        return sampler
-
-    @staticmethod
-    def _val(inputs, key):
-        return inputs.get(key, [[None, None]])[0][1]
-
-    @classmethod
-    def append_lora_models(cls, inputs, pnginfo_dict):
-        prompt = pnginfo_dict.get("Positive prompt", "")
-        
-        # Append Lora models to the positive prompt, which is required for the Civitai website to parse and apply Lora weights.
-        # Format: <lora:Lora_Model_Name:weight_value>. Example: <lora:Lora_Name_00:0.6> <lora:Lora_Name_01:0.8>
-        lora_strings, _ = cls.get_lora_strings_and_hashes(inputs)
-        if lora_strings:
-            pnginfo_dict["Positive prompt"] = (prompt + " " + " ".join(lora_strings)).strip()
-
-
-    @classmethod
     def extract_model_info(cls, inputs, meta_field_name, prefix):
         model_info_dict = {}
         model_names = inputs.get(meta_field_name, [])
@@ -312,23 +324,27 @@ class Capture:
 
     @classmethod
     def gen_parameters_str(cls, pnginfo_dict):
-        def clean(value):
-            return str(value).strip().replace("\n", " ") if value else ""
+        def clean_value(value):
+            if value is None:
+                return ""
+            value = str(value).strip()
+            return value.replace("\n", " ")
 
-        cleaned = {k: clean(v) for k, v in pnginfo_dict.items()}
-        parts = [cleaned.get("Positive prompt", "")]
+        cleaned_dict = {k: clean_value(v) for k, v in pnginfo_dict.items()}
 
-        if neg := cleaned.get("Negative prompt"):
-            parts.append(f"Negative prompt: {neg}")
+        result = [cleaned_dict.get("Positive prompt", "")]
+        negative_prompt = cleaned_dict.get("Negative prompt")
+        if negative_prompt:
+            result.append(f"Negative prompt: {negative_prompt}")
 
-        extras = [
-            f"{k}: {v}" for k, v in cleaned.items()
-            if k not in {"Positive prompt", "Negative prompt"} and v
+        s_list = [
+            f"{k}: {v}"
+            for k, v in cleaned_dict.items() 
+            if k not in {"Positive prompt", "Negative prompt"} and v not in {None, ""}
         ]
-        if extras:
-            parts.append(", ".join(extras))
 
-        return "\n".join(parts)
+        result.append(", ".join(s_list))
+        return "\n".join(result)
 
     @classmethod
     def get_hashes_for_civitai(cls, inputs_before_sampler_node, inputs_before_this_node):
