@@ -64,18 +64,27 @@ class Trace:
         return None
 
     @classmethod
-    def find_node_with_any_fields(cls, prompt, required_fields):
+    def find_node_with_fields(cls, prompt, required_fields):
         for node_id, node in prompt.items():
             if required_fields & set(node.get("inputs", {}).keys()):
                 return node_id, node
         return None, None
+    
+    @classmethod
+    def find_all_nodes_with_fields(cls, prompt, required_fields):
+        results = []
+        for node_id, node in prompt.items():
+            if required_fields & set(node.get("inputs", {}).keys()):
+                results.append((node_id, node))
+        return results
 
     @classmethod
     def find_sampler_node_id(cls, trace_tree):
         node = cls.find_node_by_class_types(trace_tree, set(SAMPLERS.keys()))
         if node:
             return node
-        raise ValueError("Could not find a sampler node in the trace tree.")
+        # raise ValueError("Could not find a sampler node in the trace tree.")
+        print("Could not find a sampler node in the trace tree.")
 
     @classmethod
     def filter_inputs_by_trace_tree(cls, inputs, trace_tree):

@@ -1,11 +1,13 @@
 import json
 import os
-
+from collections import defaultdict
 from . import hook
 from .defs.captures import CAPTURE_FIELD_LIST
 from .defs.meta import MetaField
+from .defs.formatters import calc_lora_hash, calc_model_hash, extract_embedding_names, extract_embedding_hashes
 
 from nodes import NODE_CLASS_MAPPINGS
+from .trace import Trace
 from execution import get_input_data
 from comfy_execution.graph import DynamicPrompt
 
@@ -81,10 +83,6 @@ class Capture:
         elif value is not None:
             inputs[meta].append((node_id, value))
 
-    @staticmethod
-    def sanitize_name(name):
-        return os.path.splitext(os.path.basename(name))[0].replace(' ', '_').replace(':', '_')
-
     @classmethod
     def get_lora_strings_and_hashes(cls, inputs_before_sampler_node):
         lora_names = inputs_before_sampler_node.get(MetaField.LORA_MODEL_NAME, [])
@@ -98,8 +96,8 @@ class Capture:
             if not (name and weight and hash_val):
                 continue
 
-            clean_name = cls.sanitize_name(name[1])
-            
+            clean_name = os.path.splitext(os.path.basename(name[1]))[0].replace(' ', '_').replace(':', '_')
+
             # LoRA strings for prompt and "Hashes" list
             lora_strings.append(f"<lora:{clean_name}:{weight[1]}>")
             lora_hashes_list.append(f"{clean_name}: {hash_val[1]}")
@@ -108,97 +106,173 @@ class Capture:
         return lora_strings, lora_hashes_string
 
     @classmethod
-    def gen_pnginfo_dict(cls, inputs_before_sampler_node, inputs_before_this_node, save_civitai_sampler=True):
+    def gen_pnginfo_dict(cls, inputs_before_sampler_node, inputs_before_this_node, prompt, save_civitai_sampler=True):
         pnginfo_dict = {}
 
-        # Prompts
-        cls.update_fields(inputs_before_sampler_node, pnginfo_dict, [
-            (MetaField.POSITIVE_PROMPT, "Positive prompt"),
-            (MetaField.NEGATIVE_PROMPT, "Negative prompt"),
-        ])
+        if not inputs_before_sampler_node:
+            inputs_before_sampler_node = defaultdict(list)
+            cls._collect_all_metadata(prompt, inputs_before_sampler_node)
+
+        def update_field(field, label):
+            val = cls._val(inputs_before_sampler_node, field)
+            if val:
+                pnginfo_dict[label] = val
+
+        update_field(MetaField.POSITIVE_PROMPT, "Positive prompt")
+        update_field(MetaField.NEGATIVE_PROMPT, "Negative prompt")
         cls.append_lora_models(inputs_before_sampler_node, pnginfo_dict)
 
-        # Basic metadata
-        cls.update_fields(inputs_before_sampler_node, pnginfo_dict, [
-            (MetaField.STEPS, "Steps"),
-            (MetaField.CFG, "CFG scale"),
-            (MetaField.SEED, "Seed"),
-            (MetaField.CLIP_SKIP, "Clip skip"),
-            (MetaField.MODEL_NAME, "Model"),
-            (MetaField.MODEL_HASH, "Model hash"),
-        ])
-
-        # Check if Denoise is less than 1.0 and add if so
-        denoise_value = cls._val(inputs_before_sampler_node, MetaField.DENOISE)
-        if denoise_value and 0 < float(denoise_value) < 1:
-            pnginfo_dict["Denoising strength"] = float(denoise_value)
-
-        # Check for 'Hires upscale' or 'Hires upscaler' and always add Denoise field
-        hires_upscale = cls._val(inputs_before_this_node, MetaField.UPSCALE_BY)
-        hires_upscaler = cls._val(inputs_before_this_node, MetaField.UPSCALE_MODEL_NAME)
-
-        if hires_upscale or hires_upscaler:
-            if denoise_value:
-                pnginfo_dict["Denoising strength"] = denoise_value
-
-        # Sampler & Scheduler
-        if save_civitai_sampler:
-            sampler = cls.get_sampler_for_civitai(
-                inputs_before_sampler_node.get(MetaField.SAMPLER_NAME, []),
-                inputs_before_sampler_node.get(MetaField.SCHEDULER, [])
-            )
-        else:
-            sampler = inputs_before_sampler_node.get(MetaField.SAMPLER_NAME, [[None, ""]])[0][1]
-            scheduler = inputs_before_sampler_node.get(MetaField.SCHEDULER, [[None, ""]])[0][1]
-            if scheduler and scheduler != "normal":
-                sampler += f"_{scheduler}"
-
+        sampler = cls._resolve_sampler_string(inputs_before_sampler_node, save_civitai_sampler)
         if sampler:
             pnginfo_dict["Sampler"] = sampler
 
-        # Image size
+        update_field(MetaField.MODEL_NAME, "Model")
+        update_field(MetaField.MODEL_HASH, "Model hash")
+        update_field(MetaField.STEPS, "Steps")
+        update_field(MetaField.CFG, "CFG scale")
+        update_field(MetaField.SEED, "Seed")
+        update_field(MetaField.CLIP_SKIP, "Clip skip")
+
+        cls._add_denoising_strength(inputs_before_sampler_node, inputs_before_this_node, pnginfo_dict)
+
         w = cls._val(inputs_before_sampler_node, MetaField.IMAGE_WIDTH)
         h = cls._val(inputs_before_sampler_node, MetaField.IMAGE_HEIGHT)
         if w and h:
             pnginfo_dict["Size"] = f"{w}x{h}"
 
         # VAE info
-        cls._update(inputs_before_this_node, pnginfo_dict, MetaField.VAE_NAME, "VAE")
-        cls._update(inputs_before_this_node, pnginfo_dict, MetaField.VAE_HASH, "VAE hash")
+        update_field(MetaField.VAE_NAME, "VAE")
+        update_field(MetaField.VAE_HASH, "VAE hash")
         
         # Add Hi-Res, based on https://github.com/civitai/civitai/blob/0c6a61b2d3ee341e77a357d4c08cf220e22b1190/src/server/common/model-helpers.ts#L33
-        cls._update(inputs_before_this_node, pnginfo_dict, MetaField.UPSCALE_BY, "Hires upscale")
-        cls._update(inputs_before_this_node, pnginfo_dict, MetaField.UPSCALE_MODEL_NAME, "Hires upscaler")
-        
+        update_field(MetaField.UPSCALE_BY, "Hires upscale")
+        update_field(MetaField.UPSCALE_MODEL_NAME, "Hires upscaler")
+
+        pnginfo_dict.update(cls.gen_loras(inputs_before_sampler_node))
+        pnginfo_dict.update(cls.gen_embeddings(inputs_before_sampler_node))
+
         # Add Lora hashes, based on https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/82a973c04367123ae98bd9abdf80d9eda9b910e2/extensions-builtin/Lora/scripts/lora_script.py#L78
         _, lora_hashes = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
         if lora_hashes:
             pnginfo_dict["Lora hashes"] = f'"{lora_hashes}"'
 
-        # LoRA & embeddings detailed info
-        pnginfo_dict.update(cls.gen_loras(inputs_before_sampler_node))
-        pnginfo_dict.update(cls.gen_embeddings(inputs_before_sampler_node))
-
-        # Civitai hash data
-        civitai_hashes = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
-
-        if civitai_hashes:
-            pnginfo_dict["Hashes"] = json.dumps(civitai_hashes)
+        hashes = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
+        if hashes:
+            pnginfo_dict["Hashes"] = json.dumps(hashes)
 
         return pnginfo_dict
 
-    @classmethod
-    def update_fields(cls, inputs, target_dict, metafield_pairs):
-        for key, label in metafield_pairs:
-            value = cls._val(inputs, key)
-            if value:
-                target_dict[label] = value
 
     @classmethod
-    def _update(cls, inputs, target, meta_key, label):
-        val = cls._val(inputs, meta_key)
-        if val:
-            target[label] = val
+    def _collect_all_metadata(cls, prompt, result_dict):
+        node_fields = {
+            "prompt": {"positive", "negative"},
+            "denoise": {"denoise"},
+            "sampler": {"seed", "steps", "cfg", "sampler_name", "scheduler"},
+            "size": {"width", "height"},
+            "model": {"ckpt_name"},
+        }
+        resolved_nodes = {
+            name: Trace.find_node_with_fields(prompt, fields)
+            for name, fields in node_fields.items()
+        }
+        cls._collect_lora_metadata(prompt, result_dict)
+        cls._collect_model_metadata(resolved_nodes.get("model"), result_dict)
+        cls._collect_scalar_fields(resolved_nodes.get("denoise"), MetaField.DENOISE, "denoise", result_dict)
+        cls._collect_multiple_fields(resolved_nodes.get("sampler"), result_dict, {
+            "sampler_name": MetaField.SAMPLER_NAME,
+            "scheduler": MetaField.SCHEDULER,
+            "seed": MetaField.SEED,
+            "steps": MetaField.STEPS,
+            "cfg": MetaField.CFG,
+        })
+        cls._collect_multiple_fields(resolved_nodes.get("size"), result_dict, {
+            "width": MetaField.IMAGE_WIDTH,
+            "height": MetaField.IMAGE_HEIGHT,
+        })
+        # TODO: Add embedding metadata collection
+        cls._collect_prompt_metadata(resolved_nodes.get("prompt"), prompt, result_dict)
+
+    @classmethod
+    def _collect_lora_metadata(cls, prompt, result_dict):
+        for lora_node_id, lora_node in Trace.find_all_nodes_with_fields(prompt, {"lora_name", "strength_model"}):
+            inputs = lora_node.get("inputs", {})
+            name = inputs.get("lora_name")
+            strength = inputs.get("strength_model")
+            if name:
+                result_dict[MetaField.LORA_MODEL_NAME].append((lora_node_id, name, 0))
+                result_dict[MetaField.LORA_MODEL_HASH].append((lora_node_id, calc_lora_hash(name), 0))
+            if strength:
+                result_dict[MetaField.LORA_STRENGTH_MODEL].append((lora_node_id, strength, 0))
+
+    @classmethod
+    def _collect_model_metadata(cls, model_data, result_dict):
+        if not model_data:
+            return
+        model_id, model_node = model_data
+        if model_node:
+            name = model_node["inputs"].get("ckpt_name")
+            if name:
+                result_dict[MetaField.MODEL_NAME].append((model_id, name, 0))
+                result_dict[MetaField.MODEL_HASH].append((model_id, calc_model_hash(name), 0))
+
+    @classmethod
+    def _collect_scalar_fields(cls, data, meta_key, field_key, result_dict):
+        if not data:
+            return
+        node_id, node = data
+        if node:
+            value = node["inputs"].get(field_key)
+            if value is not None:
+                result_dict[meta_key].append((node_id, value, 0))
+
+    @classmethod
+    def _collect_multiple_fields(cls, data, result_dict, field_map):
+        if not data:
+            return
+        node_id, node = data
+        if node:
+            for field, meta in field_map.items():
+                val = node["inputs"].get(field)
+                if val is not None:
+                    result_dict[meta].append((node_id, val, 0))
+
+    @classmethod
+    def _collect_prompt_metadata(cls, data, prompt, result_dict):
+        if not data:
+            return
+        prompt_id, prompt_node = data
+        if prompt_node:
+            for label, meta in {"positive": MetaField.POSITIVE_PROMPT, "negative": MetaField.NEGATIVE_PROMPT}.items():
+                ref = prompt_node["inputs"].get(label)
+                if isinstance(ref, list):
+                    node = prompt.get(ref[0])
+                    if node and isinstance(node.get("inputs"), dict):
+                        text = node["inputs"].get("text")
+                        if isinstance(text, str):
+                            result_dict[meta].append((ref[0], text, 0))
+
+    @classmethod
+    def _add_denoising_strength(cls, sampler_inputs, this_inputs, pnginfo_dict):
+        denoise = cls._val(sampler_inputs, MetaField.DENOISE)
+        if denoise and 0 < float(denoise) < 1:
+            pnginfo_dict["Denoising strength"] = float(denoise)
+        if cls._val(this_inputs, MetaField.UPSCALE_BY) or cls._val(this_inputs, MetaField.UPSCALE_MODEL_NAME):
+            if denoise:
+                pnginfo_dict["Denoising strength"] = denoise
+
+    @classmethod
+    def _resolve_sampler_string(cls, inputs, save_for_civitai):
+        if save_for_civitai:
+            return cls.get_sampler_for_civitai(
+                inputs.get(MetaField.SAMPLER_NAME, []),
+                inputs.get(MetaField.SCHEDULER, [])
+            )
+        sampler = cls._val(inputs, MetaField.SAMPLER_NAME) or ""
+        scheduler = cls._val(inputs, MetaField.SCHEDULER)
+        if scheduler and scheduler != "normal":
+            sampler += f"_{scheduler}"
+        return sampler
 
     @staticmethod
     def _val(inputs, key):

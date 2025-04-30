@@ -239,11 +239,13 @@ class SaveImageWithMetaData:
         inputs_before_this_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_this_node)
 
         sampler_node_id = Trace.find_sampler_node_id(trace_tree_from_this_node)
-        trace_tree_from_sampler_node = Trace.trace(sampler_node_id, prompt)
+        if sampler_node_id:
+            trace_tree_from_sampler_node = Trace.trace(sampler_node_id, prompt)
+            inputs_before_sampler_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_sampler_node)
+        else:
+            inputs_before_sampler_node = {}
 
-        inputs_before_sampler_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_sampler_node)
-
-        return Capture.gen_pnginfo_dict(inputs_before_sampler_node, inputs_before_this_node)
+        return Capture.gen_pnginfo_dict(inputs_before_sampler_node, inputs_before_this_node, prompt)
 
     @classmethod
     def format_filename(s, filename, pnginfo_dict):
