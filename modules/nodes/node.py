@@ -221,7 +221,8 @@ class SaveImageWithMetaData:
 
         if metadata_scope == "full":
             parameters = Capture.gen_parameters_str(pnginfo_copy)
-            metadata.add_text("parameters", parameters)
+            if parameters:  
+                metadata.add_text("parameters", parameters)
 
         if prompt is not None and metadata_scope != "workflow_only":
             metadata.add_text("prompt", json.dumps(prompt))
