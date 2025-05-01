@@ -136,7 +136,9 @@ class Capture:
         pnginfo["Negative prompt"] = negative.strip()
 
         # Sampling params
-        extract(MetaField.STEPS, "Steps")
+        if not extract(MetaField.STEPS, "Steps"):
+            print("[ComfyUI Image Metadata Extension] WARNING: Steps are empty, full metadata won't be added!")
+            return {}  # No sense in pnginfo without the Steps parameter, ref https://github.com/civitai/civitai/blob/7c8f3f3044218cf3b3d86bd9f49d12fc196ea1f6/src/utils/metadata/automatic.metadata.ts#L102C42-L102C47
 
         samplers = inputs_before_sampler_node.get(MetaField.SAMPLER_NAME)
         schedulers = inputs_before_sampler_node.get(MetaField.SCHEDULER)

@@ -221,7 +221,7 @@ class SaveImageWithMetaData:
 
         if metadata_scope == MetadataScope.FULL:
             parameters = Capture.gen_parameters_str(pnginfo_copy)
-            if parameters:  
+            if parameters and "Steps" in parameters:
                 metadata.add_text("parameters", parameters)
 
         if prompt is not None and metadata_scope != "workflow_only":
