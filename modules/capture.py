@@ -158,9 +158,15 @@ class Capture:
             pnginfo["Clip skip"] = "1"
 
         # Image size
-        width = inputs_before_sampler_node.get(MetaField.IMAGE_WIDTH, [[None]])[0][1]
-        height = inputs_before_sampler_node.get(MetaField.IMAGE_HEIGHT, [[None]])[0][1]
-        if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+        image_width_data = inputs_before_sampler_node.get(MetaField.IMAGE_WIDTH, [[None]])
+        image_height_data = inputs_before_sampler_node.get(MetaField.IMAGE_HEIGHT, [[None]])
+
+        def extract_dimension(data):
+            return data[0][1] if data and len(data[0]) > 1 and isinstance(data[0][1], int) else None
+
+        width = extract_dimension(image_width_data)
+        height = extract_dimension(image_height_data)
+        if width and height:
             pnginfo["Size"] = f"{width}x{height}"
 
         # Model details
@@ -214,16 +220,17 @@ class Capture:
 
         # LoRA metadata (multiple)
         for node_id, node in Trace.find_all_nodes_with_fields(prompt, {"lora_name", "strength_model"}):
-            inputs = node.get("inputs", {})
-            name = inputs.get("lora_name")
-            strength = inputs.get("strength_model")
-            _append_metadata(MetaField.LORA_MODEL_NAME, node_id, name)
-            _append_metadata(MetaField.LORA_MODEL_HASH, node_id, calc_lora_hash(name) if name else None)
-            _append_metadata(MetaField.LORA_STRENGTH_MODEL, node_id, strength)
+            if node is not None:
+                inputs = node.get("inputs", {})
+                name = inputs.get("lora_name")
+                strength = inputs.get("strength_model")
+                _append_metadata(MetaField.LORA_MODEL_NAME, node_id, name)
+                _append_metadata(MetaField.LORA_MODEL_HASH, node_id, calc_lora_hash(name) if name else None)
+                _append_metadata(MetaField.LORA_STRENGTH_MODEL, node_id, strength)
 
         # Model metadata
         model_node = resolved.get("model")
-        if model_node:
+        if model_node and model_node[1] is not None:
             node_id, node = model_node
             inputs = node.get("inputs", {})
             name = inputs.get("ckpt_name")
@@ -232,14 +239,14 @@ class Capture:
 
         # Denoise
         denoise_node = resolved.get("denoise")
-        if denoise_node:
+        if denoise_node and denoise_node[1] is not None:
             node_id, node = denoise_node
             val = node.get("inputs", {}).get("denoise")
             _append_metadata(MetaField.DENOISE, node_id, val)
 
         # Sampler fields
         sampler_node = resolved.get("sampler")
-        if sampler_node:
+        if sampler_node and sampler_node[1] is not None:
             node_id, node = sampler_node
             inputs = node.get("inputs", {})
             for key, meta in {
@@ -253,7 +260,7 @@ class Capture:
 
         # Image size fields
         size_node = resolved.get("size")
-        if size_node:
+        if size_node and size_node[1] is not None:
             node_id, node = size_node
             inputs = node.get("inputs", {})
             for key, meta in {
@@ -264,19 +271,20 @@ class Capture:
 
         # Prompt fields
         for node_id, node in Trace.find_all_nodes_with_fields(prompt, {"positive", "negative"}):
-            inputs = node.get("inputs", {})
-            pos_ref = inputs.get("positive", [None])[0]
-            neg_ref = inputs.get("negative", [None])[0]
+            if node is not None:
+                inputs = node.get("inputs", {})
+                pos_ref = inputs.get("positive", [None])[0]
+                neg_ref = inputs.get("negative", [None])[0]
 
-            def resolve_text(ref):
-                if isinstance(ref, list): ref = ref[0]
-                if not isinstance(ref, str): return None
-                node = prompt.get(ref)
-                return node.get("inputs", {}).get("text") if node else None
+                def resolve_text(ref):
+                    if isinstance(ref, list): ref = ref[0]
+                    if not isinstance(ref, str): return None
+                    node = prompt.get(ref)
+                    return node.get("inputs", {}).get("text") if node else None
 
-            _append_metadata(MetaField.POSITIVE_PROMPT, pos_ref, resolve_text(pos_ref))
-            _append_metadata(MetaField.NEGATIVE_PROMPT, neg_ref, resolve_text(neg_ref))
-            # TODO: Add embedding metadata collection
+                _append_metadata(MetaField.POSITIVE_PROMPT, pos_ref, resolve_text(pos_ref))
+                _append_metadata(MetaField.NEGATIVE_PROMPT, neg_ref, resolve_text(neg_ref))
+                # TODO: Add embedding metadata collection
 
     @classmethod
     def extract_model_info(cls, inputs, meta_field_name, prefix):
@@ -407,11 +415,15 @@ class Capture:
 
         sampler = None
         scheduler = None
+        
         # Get the sampler and scheduler values
-        if len(sampler_names) > 0:
-            sampler = sampler_names[0][1]
-        if len(schedulers) > 0:
-            scheduler = schedulers[0][1]
+        if sampler_names:
+            if len(sampler_names) > 0:
+                sampler = sampler_names[0][1]
+                
+        if schedulers:
+            if len(schedulers) > 0:
+                scheduler = schedulers[0][1]
 
         def get_scheduler_name(sampler_name, scheduler):
             if scheduler == "karras":
