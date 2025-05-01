@@ -151,7 +151,11 @@ class Capture:
 
         extract(MetaField.CFG, "CFG scale")
         extract(MetaField.SEED, "Seed")
-        extract(MetaField.CLIP_SKIP, "Clip skip")
+        
+        # Missing CLIP skip means it was set to 1 (the default)
+        clip_skip = extract(MetaField.CLIP_SKIP, "Clip skip")
+        if clip_skip is None:
+            pnginfo["Clip skip"] = "1"
 
         # Image size
         width = inputs_before_sampler_node.get(MetaField.IMAGE_WIDTH, [[None]])[0][1]
