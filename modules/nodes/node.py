@@ -210,7 +210,7 @@ class SaveImageWithMetaData:
         """
         Return final PNG metadata with batch information, parameters, and optional prompt details.
         """
-        if metadata_scope == "none":
+        if metadata_scope == MetadataScope.NONE:
             return None
 
         pnginfo_copy = pnginfo_dict.copy()
@@ -219,7 +219,7 @@ class SaveImageWithMetaData:
             pnginfo_copy["Batch index"] = batch_number
             pnginfo_copy["Batch size"] = total_images
 
-        if metadata_scope == "full":
+        if metadata_scope == MetadataScope.FULL:
             parameters = Capture.gen_parameters_str(pnginfo_copy)
             if parameters:  
                 metadata.add_text("parameters", parameters)

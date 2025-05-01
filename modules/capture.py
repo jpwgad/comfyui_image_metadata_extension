@@ -107,199 +107,172 @@ class Capture:
 
     @classmethod
     def gen_pnginfo_dict(cls, inputs_before_sampler_node, inputs_before_this_node, prompt, save_civitai_sampler=True):
-        pnginfo_dict = {}
+        pnginfo = {}
 
-        # Collect all metadata if sampler node missing
         if not inputs_before_sampler_node:
             inputs_before_sampler_node = defaultdict(list)
             cls._collect_all_metadata(prompt, inputs_before_sampler_node)
 
-        # Helper function to update PNG info with a single field
-        def update_field(inputs, metafield, key):
-            # Get the list for the field
-            values = inputs.get(metafield, [])
-            
-            # Check if the list is not empty and the first item has a second element
-            if values and len(values[0]) > 1:
-                value = values[0][1]
-            else:
-                value = None
-            
-            # If value is not None or empty, update the pnginfo_dict
-            if value not in [None, ""]:
-                pnginfo_dict[key] = value
-            return value  # Return the value (or None)
+        def extract(meta_key, label, source=inputs_before_sampler_node):
+            val = source.get(meta_key)
+            if val and len(val[0]) > 1 and val[0][1] is not None:
+                pnginfo[label] = val[0][1]
+                return val[0][1]
+            return None
 
-        # Update main fields
-        positive_prompt = update_field(inputs_before_sampler_node, MetaField.POSITIVE_PROMPT, "Positive prompt")
-        if positive_prompt is None:
-            positive_prompt = ""
+        # Prompts
+        positive = extract(MetaField.POSITIVE_PROMPT, "Positive prompt") or ""
+        if not positive.strip():
             print("[ComfyUI Image Metadata Extension] WARNING: Positive prompt is empty!")
 
-        negative_prompt = update_field(inputs_before_sampler_node, MetaField.NEGATIVE_PROMPT, "Negative prompt")
-        if negative_prompt is None:
-            negative_prompt = ""
-            print("[ComfyUI Image Metadata Extension] WARNING: Negative prompt is empty!")
-
-        lora_strings, lora_hashes_string = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
-
+        negative = extract(MetaField.NEGATIVE_PROMPT, "Negative prompt") or ""
+        lora_strings, lora_hashes = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
         # Append Lora models to the positive prompt, which is required for the Civitai website to parse and apply Lora weights.
         # Format: <lora:Lora_Model_Name:weight_value>. Example: <lora:Lora_Name_00:0.6> <lora:Lora_Name_01:0.8>
         if lora_strings:
-            positive_prompt += " " + " ".join(lora_strings)
+            positive += " " + " ".join(lora_strings)
 
-        pnginfo_dict["Positive prompt"] = positive_prompt.strip()
-        pnginfo_dict["Negative prompt"] = negative_prompt.strip()
-        
-        update_field(inputs_before_sampler_node, MetaField.STEPS, "Steps")
+        pnginfo["Positive prompt"] = positive.strip()
+        pnginfo["Negative prompt"] = negative.strip()
 
-        # Sampler and Scheduler handling
-        sampler_names = inputs_before_sampler_node.get(MetaField.SAMPLER_NAME, [])
-        schedulers = inputs_before_sampler_node.get(MetaField.SCHEDULER, [])
+        # Sampling params
+        extract(MetaField.STEPS, "Steps")
+
+        samplers = inputs_before_sampler_node.get(MetaField.SAMPLER_NAME)
+        schedulers = inputs_before_sampler_node.get(MetaField.SCHEDULER)
+
         if save_civitai_sampler:
-            pnginfo_dict["Sampler"] = cls.get_sampler_for_civitai(sampler_names, schedulers)
-        else:
-            if sampler_names:
-                pnginfo_dict["Sampler"] = sampler_names[0][1]
-                if schedulers and schedulers[0][1] != "normal":
-                    pnginfo_dict["Sampler"] += f"_{schedulers[0][1]}"
+            pnginfo["Sampler"] = cls.get_sampler_for_civitai(samplers, schedulers)
+        elif samplers:
+            sampler_name = samplers[0][1]
+            if schedulers and schedulers[0][1] != "normal":
+                sampler_name += f"_{schedulers[0][1]}"
+            pnginfo["Sampler"] = sampler_name
 
-        # Additional fields
-        update_field(inputs_before_sampler_node, MetaField.CFG, "CFG scale")
-        update_field(inputs_before_sampler_node, MetaField.SEED, "Seed")
-        update_field(inputs_before_sampler_node, MetaField.CLIP_SKIP, "Clip skip")
+        extract(MetaField.CFG, "CFG scale")
+        extract(MetaField.SEED, "Seed")
+        extract(MetaField.CLIP_SKIP, "Clip skip")
 
         # Image size
-        image_width = inputs_before_sampler_node.get(MetaField.IMAGE_WIDTH, [[None]])[0][1]
-        image_height = inputs_before_sampler_node.get(MetaField.IMAGE_HEIGHT, [[None]])[0][1]
-        if isinstance(image_width, int) and isinstance(image_height, int) and image_width > 0 and image_height > 0:
-            pnginfo_dict["Size"] = f"{image_width}x{image_height}"
+        width = inputs_before_sampler_node.get(MetaField.IMAGE_WIDTH, [[None]])[0][1]
+        height = inputs_before_sampler_node.get(MetaField.IMAGE_HEIGHT, [[None]])[0][1]
+        if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+            pnginfo["Size"] = f"{width}x{height}"
 
-        update_field(inputs_before_sampler_node, MetaField.MODEL_NAME, "Model")
-        update_field(inputs_before_sampler_node, MetaField.MODEL_HASH, "Model hash")
-        update_field(inputs_before_this_node, MetaField.VAE_NAME, "VAE")
-        update_field(inputs_before_this_node, MetaField.VAE_HASH, "VAE hash")
+        # Model details
+        extract(MetaField.MODEL_NAME, "Model")
+        extract(MetaField.MODEL_HASH, "Model hash")
+        extract(MetaField.VAE_NAME, "VAE", inputs_before_this_node)
+        extract(MetaField.VAE_HASH, "VAE hash", inputs_before_this_node)
 
-        # Handle Denoising Strength
-        denoise_value = inputs_before_sampler_node.get(MetaField.DENOISE, [])
-        if denoise_value:
-            denoise_value = denoise_value[0][1] if isinstance(denoise_value[0], (tuple, list)) else denoise_value[0]
-            if 0 < float(denoise_value) < 1:
-                pnginfo_dict["Denoising strength"] = float(denoise_value)
+        # Denoising strength
+        denoise = inputs_before_sampler_node.get(MetaField.DENOISE)
+        dval = denoise[0][1] if denoise else None
+        if dval and 0 < float(dval) < 1:
+            pnginfo["Denoising strength"] = float(dval)
 
-        # Check for 'Hires upscale' or 'Hires upscaler'
-        hires_upscale = inputs_before_this_node.get(MetaField.UPSCALE_BY, [])
-        hires_upscaler = inputs_before_this_node.get(MetaField.UPSCALE_MODEL_NAME, [])
-        if hires_upscale or hires_upscaler:
-            pnginfo_dict["Denoising strength"] = denoise_value or 1.0 # if 'Hires upscale' or 'Hires upscaler' always add Denoise field
+        # Include upscale info if present
+        if inputs_before_this_node.get(MetaField.UPSCALE_BY) or inputs_before_this_node.get(MetaField.UPSCALE_MODEL_NAME):
+            pnginfo["Denoising strength"] = float(dval or 1.0)
 
-        # Add Hi-Res, based on https://github.com/civitai/civitai/blob/0c6a61b2d3ee341e77a357d4c08cf220e22b1190/src/server/common/model-helpers.ts#L33
-        update_field(inputs_before_this_node, MetaField.UPSCALE_BY, "Hires upscale")
-        update_field(inputs_before_this_node, MetaField.UPSCALE_MODEL_NAME, "Hires upscaler")
+        # Hi-Res, based on https://github.com/civitai/civitai/blob/0c6a61b2d3ee341e77a357d4c08cf220e22b1190/src/server/common/model-helpers.ts#L33
+        extract(MetaField.UPSCALE_BY, "Hires upscale", inputs_before_this_node)
+        extract(MetaField.UPSCALE_MODEL_NAME, "Hires upscaler", inputs_before_this_node)
 
-        # Add Lora hashes, based on https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/82a973c04367123ae98bd9abdf80d9eda9b910e2/extensions-builtin/Lora/scripts/lora_script.py#L78
-        if lora_hashes_string:
-            pnginfo_dict["Lora hashes"] = f'"{lora_hashes_string}"'
+        # Lora hashes, based on https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/82a973c04367123ae98bd9abdf80d9eda9b910e2/extensions-builtin/Lora/scripts/lora_script.py#L78
+        if lora_hashes:
+            pnginfo["Lora hashes"] = f'"{lora_hashes}"'
 
-        # Update with Lora and Embeddings
-        pnginfo_dict.update(cls.gen_loras(inputs_before_sampler_node))
-        pnginfo_dict.update(cls.gen_embeddings(inputs_before_sampler_node))
+        # Additional metadata
+        pnginfo.update(cls.gen_loras(inputs_before_sampler_node))
+        pnginfo.update(cls.gen_embeddings(inputs_before_sampler_node))
 
-        # Add model hashes
-        hashes_for_civitai = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
-        if hashes_for_civitai:
-            pnginfo_dict["Hashes"] = json.dumps(hashes_for_civitai)
+        hashes = cls.get_hashes_for_civitai(inputs_before_sampler_node, inputs_before_this_node)
+        if hashes:
+            pnginfo["Hashes"] = json.dumps(hashes)
 
-        return pnginfo_dict
+        return pnginfo
 
     @classmethod
     def _collect_all_metadata(cls, prompt, result_dict):
-        node_fields = {
-            "prompt": {"positive", "negative"},
-            "denoise": {"denoise"},
-            "sampler": {"seed", "steps", "cfg", "sampler_name", "scheduler"},
-            "size": {"width", "height"},
-            "model": {"ckpt_name"},
-        }
-        resolved_nodes = {
-            name: Trace.find_node_with_fields(prompt, fields)
-            for name, fields in node_fields.items()
-        }
-        cls._collect_lora_metadata(prompt, result_dict)
-        cls._collect_model_metadata(resolved_nodes.get("model"), result_dict)
-        cls._collect_scalar_fields(resolved_nodes.get("denoise"), MetaField.DENOISE, "denoise", result_dict)
-        cls._collect_multiple_fields(resolved_nodes.get("sampler"), result_dict, {
-            "sampler_name": MetaField.SAMPLER_NAME,
-            "scheduler": MetaField.SCHEDULER,
-            "seed": MetaField.SEED,
-            "steps": MetaField.STEPS,
-            "cfg": MetaField.CFG,
-        })
-        cls._collect_multiple_fields(resolved_nodes.get("size"), result_dict, {
-            "width": MetaField.IMAGE_WIDTH,
-            "height": MetaField.IMAGE_HEIGHT,
-        })
-        # TODO: Add embedding metadata collection
-        cls._collect_prompt_metadata(resolved_nodes.get("prompt"), prompt, result_dict)
+        def _append_metadata(meta, node_id, value):
+            if value is not None:
+                result_dict[meta].append((node_id, value, 0))
 
-    @classmethod
-    def _collect_lora_metadata(cls, prompt, result_dict):
-        for lora_node_id, lora_node in Trace.find_all_nodes_with_fields(prompt, {"lora_name", "strength_model"}):
-            inputs = lora_node.get("inputs", {})
+        # Detect nodes with specific fields
+        resolved = {
+            "prompt": Trace.find_node_with_fields(prompt, {"positive", "negative"}),
+            "denoise": Trace.find_node_with_fields(prompt, {"denoise"}),
+            "sampler": Trace.find_node_with_fields(prompt, {"seed", "steps", "cfg", "sampler_name", "scheduler"}),
+            "size": Trace.find_node_with_fields(prompt, {"width", "height"}),
+            "model": Trace.find_node_with_fields(prompt, {"ckpt_name"}),
+        }
+
+        # LoRA metadata (multiple)
+        for node_id, node in Trace.find_all_nodes_with_fields(prompt, {"lora_name", "strength_model"}):
+            inputs = node.get("inputs", {})
             name = inputs.get("lora_name")
             strength = inputs.get("strength_model")
-            if name:
-                result_dict[MetaField.LORA_MODEL_NAME].append((lora_node_id, name, 0))
-                result_dict[MetaField.LORA_MODEL_HASH].append((lora_node_id, calc_lora_hash(name), 0))
-            if strength:
-                result_dict[MetaField.LORA_STRENGTH_MODEL].append((lora_node_id, strength, 0))
+            _append_metadata(MetaField.LORA_MODEL_NAME, node_id, name)
+            _append_metadata(MetaField.LORA_MODEL_HASH, node_id, calc_lora_hash(name) if name else None)
+            _append_metadata(MetaField.LORA_STRENGTH_MODEL, node_id, strength)
 
-    @classmethod
-    def _collect_model_metadata(cls, model_data, result_dict):
-        if not model_data:
-            return
-        model_id, model_node = model_data
+        # Model metadata
+        model_node = resolved.get("model")
         if model_node:
-            name = model_node["inputs"].get("ckpt_name")
-            if name:
-                result_dict[MetaField.MODEL_NAME].append((model_id, name, 0))
-                result_dict[MetaField.MODEL_HASH].append((model_id, calc_model_hash(name), 0))
+            node_id, node = model_node
+            inputs = node.get("inputs", {})
+            name = inputs.get("ckpt_name")
+            _append_metadata(MetaField.MODEL_NAME, node_id, name)
+            _append_metadata(MetaField.MODEL_HASH, node_id, calc_model_hash(name) if name else None)
 
-    @classmethod
-    def _collect_scalar_fields(cls, data, meta_key, field_key, result_dict):
-        if not data:
-            return
-        node_id, node = data
-        if node:
-            value = node["inputs"].get(field_key)
-            if value is not None:
-                result_dict[meta_key].append((node_id, value, 0))
+        # Denoise
+        denoise_node = resolved.get("denoise")
+        if denoise_node:
+            node_id, node = denoise_node
+            val = node.get("inputs", {}).get("denoise")
+            _append_metadata(MetaField.DENOISE, node_id, val)
 
-    @classmethod
-    def _collect_multiple_fields(cls, data, result_dict, field_map):
-        if not data:
-            return
-        node_id, node = data
-        if node:
-            for field, meta in field_map.items():
-                val = node["inputs"].get(field)
-                if val is not None:
-                    result_dict[meta].append((node_id, val, 0))
+        # Sampler fields
+        sampler_node = resolved.get("sampler")
+        if sampler_node:
+            node_id, node = sampler_node
+            inputs = node.get("inputs", {})
+            for key, meta in {
+                "sampler_name": MetaField.SAMPLER_NAME,
+                "scheduler": MetaField.SCHEDULER,
+                "seed": MetaField.SEED,
+                "steps": MetaField.STEPS,
+                "cfg": MetaField.CFG,
+            }.items():
+                _append_metadata(meta, node_id, inputs.get(key))
 
-    @classmethod
-    def _collect_prompt_metadata(cls, data, prompt, result_dict):
-        if not data:
-            return
-        prompt_id, prompt_node = data
-        if prompt_node:
-            for label, meta in {"positive": MetaField.POSITIVE_PROMPT, "negative": MetaField.NEGATIVE_PROMPT}.items():
-                ref = prompt_node["inputs"].get(label)
-                if isinstance(ref, list):
-                    node = prompt.get(ref[0])
-                    if node and isinstance(node.get("inputs"), dict):
-                        text = node["inputs"].get("text")
-                        if isinstance(text, str):
-                            result_dict[meta].append((ref[0], text, 0))
+        # Image size fields
+        size_node = resolved.get("size")
+        if size_node:
+            node_id, node = size_node
+            inputs = node.get("inputs", {})
+            for key, meta in {
+                "width": MetaField.IMAGE_WIDTH,
+                "height": MetaField.IMAGE_HEIGHT,
+            }.items():
+                _append_metadata(meta, node_id, inputs.get(key))
+
+        # Prompt fields
+        for node_id, node in Trace.find_all_nodes_with_fields(prompt, {"positive", "negative"}):
+            inputs = node.get("inputs", {})
+            pos_ref = inputs.get("positive", [None])[0]
+            neg_ref = inputs.get("negative", [None])[0]
+
+            def resolve_text(ref):
+                if isinstance(ref, list): ref = ref[0]
+                if not isinstance(ref, str): return None
+                node = prompt.get(ref)
+                return node.get("inputs", {}).get("text") if node else None
+
+            _append_metadata(MetaField.POSITIVE_PROMPT, pos_ref, resolve_text(pos_ref))
+            _append_metadata(MetaField.NEGATIVE_PROMPT, neg_ref, resolve_text(neg_ref))
+            # TODO: Add embedding metadata collection
 
     @classmethod
     def extract_model_info(cls, inputs, meta_field_name, prefix):
