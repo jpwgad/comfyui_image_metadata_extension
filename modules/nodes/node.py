@@ -89,10 +89,6 @@ class SaveImageWithMetaData:
                             "\n'workflow_only' - workflow metadata only, "
                             "\n'none' - no metadata."
                 }),
-                "include_batch_num": ("BOOLEAN", {
-                    "default": True,
-                    "tooltip": "Include batch number in filename."
-                }),
             },
             "hidden": {
                 "prompt": "PROMPT",
@@ -134,8 +130,7 @@ class SaveImageWithMetaData:
 
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
                     extra_pnginfo=None, extra_metadata=None, output_format="png",
-                    quality="max", metadata_scope="full",
-                    include_batch_num=True, pnginfo_dict=None):
+                    quality="max", metadata_scope="full", pnginfo_dict=None):
 
         extra_metadata = extra_metadata or {}
         base_format, save_workflow_json = self.parse_output_format(output_format)
@@ -168,7 +163,8 @@ class SaveImageWithMetaData:
             for key, value in extra_metadata.items():
                 metadata.add_text(key, value)
 
-            filename_with_batch_num = f"{filename}_{batch_number:05}" if include_batch_num else filename
+            # Include batch number only if batch size > 1
+            filename_with_batch_num = f"{filename}_{batch_number:05}" if len(images) > 1 else filename
             file = f"{filename_with_batch_num}.{base_format}"
             path = os.path.join(full_output_folder, file)
 
@@ -200,7 +196,7 @@ class SaveImageWithMetaData:
             images_length = len(images)
             if images_length > 0:
                 last_batch_number = images_length - 1
-                json_filename = f"{filename}_{last_batch_number:05}.json" if include_batch_num else f"{filename}.json"
+                json_filename = f"{filename}_{last_batch_number:05}.json" if len(images) > 1 else f"{filename}.json"
                 batch_json_file = os.path.join(full_output_folder, json_filename)
                 with open(batch_json_file, "w", encoding="utf-8") as f:
                     json.dump(extra_pnginfo["workflow"], f)
