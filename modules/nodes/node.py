@@ -143,11 +143,13 @@ class SaveImageWithMetaData:
         if pnginfo_dict is None:
             pnginfo_dict = self.gen_pnginfo(prompt) if metadata_scope == MetadataScope.FULL else {}
 
-        filename_prefix = self.format_filename(filename_prefix, pnginfo_dict) + self.prefix_append
+        filename_prefix = self.format_filename(filename_prefix.strip(), pnginfo_dict) + self.prefix_append
 
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
             filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0]
         )
+        
+        subdirectory_name = subdirectory_name.strip()
 
         if subdirectory_name:
             subdirectory_name = self.format_filename(subdirectory_name, pnginfo_dict)
@@ -163,9 +165,8 @@ class SaveImageWithMetaData:
             metadata = self.prepare_pnginfo(pnginfo, pnginfo_dict, batch_number, len(images), prompt, extra_pnginfo, metadata_scope)
 
             # Add user extra metadata to image metadata
-            for k, v in extra_metadata.items():
-                if k:
-                    metadata.add_text(k, v if isinstance(v, str) else json.dumps(v))
+            for key, value in extra_metadata.items():
+                metadata.add_text(key, value)
 
             filename_with_batch_num = f"{filename}_{batch_number:05}" if include_batch_num else filename
             file = f"{filename_with_batch_num}.{base_format}"
@@ -320,10 +321,11 @@ class CreateExtraMetaData:
             extra_metadata = {}
 
         for i in range(1, 5):
-            key = keys_values.get(f"key{i}")
-            value = keys_values.get(f"value{i}")
+            key = keys_values.get(f"key{i}", "").strip()
+            value = keys_values.get(f"value{i}", "").strip()
+            
             if key:
-                extra_metadata[key] = value if value else ""  # Allow empty values for the metadata
+                extra_metadata[key] = value
             elif value:
                 raise ValueError(f"Value provided for 'value{i}' without corresponding 'key{i}'.")
 
