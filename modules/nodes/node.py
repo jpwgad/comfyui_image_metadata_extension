@@ -89,6 +89,10 @@ class SaveImageWithMetaData:
                             "\n'workflow_only' - workflow metadata only, "
                             "\n'none' - no metadata."
                 }),
+                "include_batch_num": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Include batch number in filename."
+                }),
             },
             "hidden": {
                 "prompt": "PROMPT",
@@ -130,7 +134,8 @@ class SaveImageWithMetaData:
 
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
                     extra_pnginfo=None, extra_metadata=None, output_format="png",
-                    quality="max", metadata_scope="full", pnginfo_dict=None):
+                    quality="max", metadata_scope="full",
+                    include_batch_num=True, pnginfo_dict=None):
 
         extra_metadata = extra_metadata or {}
         base_format, save_workflow_json = self.parse_output_format(output_format)
@@ -140,40 +145,48 @@ class SaveImageWithMetaData:
 
         filename_prefix = self.format_filename(filename_prefix.strip(), pnginfo_dict) + self.prefix_append
 
+        image_shape = images[0].shape
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
-            filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0]
+            filename_prefix, self.output_dir, image_shape[1], image_shape[0]
         )
-        
+
+        images_length = len(images)
+        include_batch_num = images_length > 1
         subdirectory_name = subdirectory_name.strip()
 
+        # If subdirectory name is provided, adjust the output path
         if subdirectory_name:
             subdirectory_name = self.format_filename(subdirectory_name, pnginfo_dict)
             full_output_folder = os.path.join(self.output_dir, subdirectory_name)
             filename = filename_prefix
 
         results = list()
+        
+        # Create the output folder if it doesn't exist
         os.makedirs(full_output_folder, exist_ok=True)
 
         for batch_number, image in enumerate(images):
             i = 255. * image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-            metadata = self.prepare_pnginfo(pnginfo, pnginfo_dict, batch_number, len(images), prompt, extra_pnginfo, metadata_scope)
-
+            metadata = self.prepare_pnginfo(pnginfo, pnginfo_dict, batch_number, images_length, prompt, extra_pnginfo, metadata_scope)
+            
             # Add user extra metadata to image metadata
             for key, value in extra_metadata.items():
                 metadata.add_text(key, value)
 
             # Include batch number only if batch size > 1
-            filename_with_batch_num = f"{filename}_{batch_number:05}" if len(images) > 1 else filename
+            filename_with_batch_num = f"{filename}_{batch_number:05}" if images_length else filename
             file = f"{filename_with_batch_num}.{base_format}"
             path = os.path.join(full_output_folder, file)
 
+            # Ensure the filename is unique
             if os.path.exists(path):
                 file = self.find_next_available_filename(full_output_folder, filename_with_batch_num, base_format)
                 path = os.path.join(full_output_folder, file)
 
             quality_value = self.get_quality_value(quality)
-
+            
+            # Save the image
             if base_format == "webp":
                 img.save(path, "WEBP", lossless=(quality_value == 100), quality=quality_value)
             elif base_format == "png":
@@ -181,6 +194,7 @@ class SaveImageWithMetaData:
             else:
                 img.save(path, optimize=True, quality=quality_value)
 
+            # Insert EXIF for jpg/webp formats
             if base_format in ["jpg", "webp"]:
                 exif_bytes = piexif.dump({
                     "Exif": {
@@ -192,14 +206,12 @@ class SaveImageWithMetaData:
             results.append({"filename": file, "subfolder": full_output_folder, "type": self.type})
 
         # Save the JSON metadata for the whole batch once
-        if save_workflow_json and images is not None:
-            images_length = len(images)
-            if images_length > 0:
-                last_batch_number = images_length - 1
-                json_filename = f"{filename}_{last_batch_number:05}.json" if len(images) > 1 else f"{filename}.json"
-                batch_json_file = os.path.join(full_output_folder, json_filename)
-                with open(batch_json_file, "w", encoding="utf-8") as f:
-                    json.dump(extra_pnginfo["workflow"], f)
+        if save_workflow_json and images_length > 0:
+            last_batch_number = images_length - 1
+            json_filename = f"{filename}_{last_batch_number:05}.json" if include_batch_num else f"{filename}.json"
+            batch_json_file = os.path.join(full_output_folder, json_filename)
+            with open(batch_json_file, "w", encoding="utf-8") as f:
+                json.dump(extra_pnginfo["workflow"], f)
 
         return {"ui": {"images": results}}
 
@@ -250,45 +262,56 @@ class SaveImageWithMetaData:
         """
         Replaces placeholders in the filename with actual values like date, seed, prompt, etc.
         """
-        result = re.findall(s.pattern_format, filename)
         
-        now = datetime.now()
-        date_table = {
-            "yyyy": f"{now.year}",
-            "MM": f"{now.month:02d}",
-            "dd": f"{now.day:02d}",
-            "hh": f"{now.hour:02d}",
-            "mm": f"{now.minute:02d}",
-            "ss": f"{now.second:02d}",
-        }
+        if "%" in filename:  
+            result = re.findall(s.pattern_format, filename)
+            now = datetime.now()
+            date_table = {
+                "yyyy": f"{now.year}",
+                "MM": f"{now.month:02d}",
+                "dd": f"{now.day:02d}",
+                "hh": f"{now.hour:02d}",
+                "mm": f"{now.minute:02d}",
+                "ss": f"{now.second:02d}",
+            }
 
-        for segment in result:
-            parts = segment.strip("%").split(":")
-            key = parts[0]
+            for segment in result:
+                parts = segment.strip("%").split(":")
+                key = parts[0]
 
-            if key == "seed":
-                filename = filename.replace(segment, str(pnginfo_dict.get("Seed", "")))
+                if key == "seed":
+                    if "Seed" not in pnginfo_dict:
+                        raise ValueError("Seed not found in pnginfo_dict.")
+                    filename = filename.replace(segment, str(pnginfo_dict.get("Seed", "")))
 
-            elif key in {"width", "height"}:
-                size = pnginfo_dict.get("Size", "x").split("x")
-                value = size[0] if key == "width" else size[1]
-                filename = filename.replace(segment, value)
+                elif key in {"width", "height"}:
+                    if "Size" not in pnginfo_dict:
+                        raise ValueError("Size not found in pnginfo_dict.")
+                    size = pnginfo_dict.get("Size", "x").split("x")
+                    value = size[0] if key == "width" else size[1]
+                    filename = filename.replace(segment, value)
 
-            elif key in {"pprompt", "nprompt"}:
-                prompt = pnginfo_dict.get(f"{'Positive' if key == 'pprompt' else 'Negative'} prompt", "").replace("\n", " ")
-                length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
-                filename = filename.replace(segment, prompt[:length].strip() if length else prompt.strip())
+                elif key in {"pprompt", "nprompt"}:
+                    if key == 'pprompt' and "Positive prompt" not in pnginfo_dict:
+                        raise ValueError("Positive prompt not found in pnginfo_dict.")
+                    if key == 'nprompt' and "Negative prompt" not in pnginfo_dict:
+                        raise ValueError("Negative prompt not found in pnginfo_dict.")
+                    prompt = pnginfo_dict.get(f"{'Positive' if key == 'pprompt' else 'Negative'} prompt", "").replace("\n", " ")
+                    length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+                    filename = filename.replace(segment, prompt[:length].strip() if length else prompt.strip())
 
-            elif key == "model":
-                model = os.path.splitext(os.path.basename(pnginfo_dict.get("Model", "")))[0]
-                length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
-                filename = filename.replace(segment, model[:length] if length else model)
+                elif key == "model":
+                    if "Model" not in pnginfo_dict:
+                        raise ValueError("Model not found in pnginfo_dict.")
+                    model = os.path.splitext(os.path.basename(pnginfo_dict.get("Model", "")))[0]
+                    length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+                    filename = filename.replace(segment, model[:length] if length else model)
 
-            elif key == "date":
-                date_format = parts[1] if len(parts) > 1 else "yyyyMMddhhmmss"
-                for k, v in date_table.items():
-                    date_format = date_format.replace(k, v)
-                filename = filename.replace(segment, date_format)
+                elif key == "date":
+                    date_format = parts[1] if len(parts) > 1 else "yyyyMMddhhmmss"
+                    for k, v in date_table.items():
+                        date_format = date_format.replace(k, v)
+                    filename = filename.replace(segment, date_format)
 
         return filename
 
