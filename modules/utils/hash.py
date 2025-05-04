@@ -6,6 +6,7 @@ from collections import OrderedDict
 from functools import lru_cache
 
 from ..config import NODE_CACHE_DIR
+from .log import print_warning, print_error
 
 CACHE_FILE = os.path.join(NODE_CACHE_DIR, "model_hash_cache.json")
 CACHE_SIZE_LIMIT = 100
@@ -22,7 +23,7 @@ if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             _disk_cache = json.load(f)
     except Exception as e:
-        print(f"[ERROR] Failed to load cache file {CACHE_FILE}: {e}")
+        print_error(f"Failed to load cache file {CACHE_FILE}: {e}")
         _disk_cache = {}
 
 @lru_cache(maxsize=100)  # Cache up to 100 file modification times
@@ -50,10 +51,15 @@ def save_disk_cache():
         os.replace(temp_file, CACHE_FILE)  # Atomic write
         _disk_cache_dirty = False  # Reset flag after successful write
     except Exception as e:
-        print(f"[ERROR] Failed to write cache to {CACHE_FILE}: {e}")
+        print_error(f"Failed to write cache to {CACHE_FILE}: {e}")
 
 def calc_hash(filename, use_only_filename=True):
     global _disk_cache_dirty
+
+    if not filename or not os.path.isfile(filename):
+        print_warning(f"calc_hash: File not found or invalid path: {filename}")
+        return ""
+
     key = os.path.basename(filename) if use_only_filename else filename
     current_mod_time = get_file_mod_time(filename)
 
@@ -99,5 +105,5 @@ def calc_hash(filename, use_only_filename=True):
 
         return model_hash
     except Exception as e:
-        print(f"[ERROR] Failed to calculate hash for {filename}: {e}")
+        print_error(f"Failed to calculate hash for {filename}: {e}")
         return ""

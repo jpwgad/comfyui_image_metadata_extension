@@ -2,12 +2,6 @@ import re
 import folder_paths
 from ..utils.hash import calc_hash
 from ..utils.embedding import get_embedding_file_path
-from comfy.sd1_clip import escape_important, token_weights, unescape_important
-from comfy.sd1_clip import SD1Tokenizer
-from comfy.text_encoders.sd2_clip import SD2Tokenizer
-from comfy.text_encoders.sd3_clip import SD3Tokenizer
-from comfy.text_encoders.flux import FluxTokenizer
-from comfy.sdxl_clip import SDXLTokenizer
 
 cache_model_hash = {}
 
