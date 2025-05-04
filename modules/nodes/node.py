@@ -16,6 +16,7 @@ import folder_paths
 from .. import hook
 from ..capture import Capture
 from ..trace import Trace
+from ..utils.log import print_warning
 
 
 class OutputFormat(str, Enum):
@@ -46,6 +47,7 @@ class SaveImageWithMetaData:
     OUTPUT_FORMATS = [e for e in OutputFormat]
     QUALITY_OPTIONS = [e for e in QualityOption]
     METADATA_OPTIONS = [e for e in MetadataScope]
+    NEEDS_METADATA_KEYS = {"seed", "width", "height", "pprompt", "nprompt", "model"}
 
     def __init__(self):
         self.output_dir = folder_paths.get_output_directory()
@@ -131,6 +133,18 @@ class SaveImageWithMetaData:
         while f"{name}_{i:05d}" in existing:
             i += 1
         return i
+    
+    @classmethod
+    def parse_filename_placeholders(cls, filename: str) -> list[str]:
+        """Extracts placeholder segments like %seed%, %pprompt:32%, etc."""
+        return re.findall(cls.pattern_format, filename) if "%" in filename else []
+    
+    def needs_pnginfo_in_filename(self, segments: list[str]) -> bool:
+        for segment in segments:
+            parts = segment.strip("%").split(":")
+            if parts[0] in self.NEEDS_METADATA_KEYS:
+                return True
+        return False
 
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
                     extra_pnginfo=None, extra_metadata=None, output_format="png",
@@ -141,10 +155,17 @@ class SaveImageWithMetaData:
         base_format, save_workflow_json = self.parse_output_format(output_format)
         pnginfo = PngInfo()
         
-        # Use provided or default metadata
-        pnginfo_dict = pnginfo_dict or (self.gen_pnginfo(prompt) if metadata_scope == MetadataScope.FULL else {})
-        
-        filename_prefix = self.format_filename(filename_prefix.strip(), pnginfo_dict) + self.prefix_append
+        # Parse filename
+        filename_prefix = filename_prefix.strip()
+        segments = self.parse_filename_placeholders(filename_prefix)
+
+        if metadata_scope == MetadataScope.FULL or self.needs_pnginfo_in_filename(segments):
+            pnginfo_dict = pnginfo_dict or self.gen_pnginfo(prompt)
+
+        filename_prefix = self.format_filename(filename_prefix, pnginfo_dict or {}, segments) + self.prefix_append
+        subdirectory_name = self.format_filename(subdirectory_name, pnginfo_dict or {})
+
+
         image_shape = images[0].shape
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
             filename_prefix, self.output_dir, image_shape[1], image_shape[0]
@@ -258,60 +279,63 @@ class SaveImageWithMetaData:
         return Capture.gen_pnginfo_dict(inputs_before_sampler_node, inputs_before_this_node, prompt)
 
     @classmethod
-    def format_filename(s, filename, pnginfo_dict):
+    def format_filename(cls, filename, pnginfo_dict, segments=None):
         """
         Replaces placeholders in the filename with actual values like date, seed, prompt, etc.
         """
-        
-        if "%" in filename:  
-            result = re.findall(s.pattern_format, filename)
-            now = datetime.now()
-            date_table = {
-                "yyyy": f"{now.year}",
-                "MM": f"{now.month:02d}",
-                "dd": f"{now.day:02d}",
-                "hh": f"{now.hour:02d}",
-                "mm": f"{now.minute:02d}",
-                "ss": f"{now.second:02d}",
-            }
+        if "%" not in filename:
+            return filename
 
-            for segment in result:
-                parts = segment.strip("%").split(":")
-                key = parts[0]
+        segments = segments or re.findall(cls.pattern_format, filename)
+        now = datetime.now()
+        date_table = {
+            "yyyy": f"{now.year}",
+            "MM": f"{now.month:02d}",
+            "dd": f"{now.day:02d}",
+            "hh": f"{now.hour:02d}",
+            "mm": f"{now.minute:02d}",
+            "ss": f"{now.second:02d}",
+        }
 
-                if key == "seed":
-                    if "Seed" not in pnginfo_dict:
-                        raise ValueError("Seed not found in pnginfo_dict.")
-                    filename = filename.replace(segment, str(pnginfo_dict.get("Seed", "")))
+        for segment in segments:
+            parts = segment.strip("%").split(":")
+            key = parts[0]
 
-                elif key in {"width", "height"}:
-                    if "Size" not in pnginfo_dict:
-                        raise ValueError("Size not found in pnginfo_dict.")
-                    size = pnginfo_dict.get("Size", "x").split("x")
-                    value = size[0] if key == "width" else size[1]
-                    filename = filename.replace(segment, value)
+            if key == "seed":
+                seed = pnginfo_dict.get("Seed")
+                if seed is None:
+                    print_warning("Seed not found in pnginfo_dict!")
+                filename = filename.replace(segment, str(seed or ""))
 
-                elif key in {"pprompt", "nprompt"}:
-                    if key == 'pprompt' and "Positive prompt" not in pnginfo_dict:
-                        raise ValueError("Positive prompt not found in pnginfo_dict.")
-                    if key == 'nprompt' and "Negative prompt" not in pnginfo_dict:
-                        raise ValueError("Negative prompt not found in pnginfo_dict.")
-                    prompt = pnginfo_dict.get(f"{'Positive' if key == 'pprompt' else 'Negative'} prompt", "").replace("\n", " ")
-                    length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
-                    filename = filename.replace(segment, prompt[:length].strip() if length else prompt.strip())
+            elif key in {"width", "height"}:
+                size = pnginfo_dict.get("Size", "x").split("x")
+                if "Size" not in pnginfo_dict:
+                    print_warning("Size not found in pnginfo_dict!")
+                value = size[0] if key == "width" else size[1]
+                filename = filename.replace(segment, value)
 
-                elif key == "model":
-                    if "Model" not in pnginfo_dict:
-                        raise ValueError("Model not found in pnginfo_dict.")
-                    model = os.path.splitext(os.path.basename(pnginfo_dict.get("Model", "")))[0]
-                    length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
-                    filename = filename.replace(segment, model[:length] if length else model)
+            elif key in {"pprompt", "nprompt"}:
+                prompt_key = "Positive prompt" if key == "pprompt" else "Negative prompt"
+                prompt = pnginfo_dict.get(prompt_key, "")
+                if not prompt:
+                    print_warning(f"{prompt_key} not found in pnginfo_dict!")
+                prompt = prompt.replace("\n", " ")
+                length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+                filename = filename.replace(segment, prompt[:length].strip() if length else prompt.strip())
 
-                elif key == "date":
-                    date_format = parts[1] if len(parts) > 1 else "yyyyMMddhhmmss"
-                    for k, v in date_table.items():
-                        date_format = date_format.replace(k, v)
-                    filename = filename.replace(segment, date_format)
+            elif key == "model":
+                model = pnginfo_dict.get("Model", "")
+                if not model:
+                    print_warning("Model not found in pnginfo_dict!")
+                model = os.path.splitext(os.path.basename(model))[0]
+                length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+                filename = filename.replace(segment, model[:length] if length else model)
+
+            elif key == "date":
+                date_format = parts[1] if len(parts) > 1 else "yyyyMMddhhmmss"
+                for k, v in date_table.items():
+                    date_format = date_format.replace(k, v)
+                filename = filename.replace(segment, date_format)
 
         return filename
 
