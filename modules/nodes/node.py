@@ -128,9 +128,9 @@ class SaveImageWithMetaData:
         """
         existing = {f.stem for f in Path(folder).glob(f"{name}_*.{ext}")}
         i = 1
-        while f"{name}_{i}" in existing:
+        while f"{name}_{i:05d}" in existing:
             i += 1
-        return f"{name}_{i}.{ext}"
+        return i
 
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
                     extra_pnginfo=None, extra_metadata=None, output_format="png",
@@ -140,53 +140,53 @@ class SaveImageWithMetaData:
         extra_metadata = extra_metadata or {}
         base_format, save_workflow_json = self.parse_output_format(output_format)
         pnginfo = PngInfo()
-        if pnginfo_dict is None:
-            pnginfo_dict = self.gen_pnginfo(prompt) if metadata_scope == MetadataScope.FULL else {}
-
+        
+        # Use provided or default metadata
+        pnginfo_dict = pnginfo_dict or (self.gen_pnginfo(prompt) if metadata_scope == MetadataScope.FULL else {})
+        
         filename_prefix = self.format_filename(filename_prefix.strip(), pnginfo_dict) + self.prefix_append
-
         image_shape = images[0].shape
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
             filename_prefix, self.output_dir, image_shape[1], image_shape[0]
         )
 
-        images_length = len(images)
-        include_batch_num = images_length > 1
+        # Handle subdirectory naming and creation
         subdirectory_name = subdirectory_name.strip()
-
-        # If subdirectory name is provided, adjust the output path
         if subdirectory_name:
             subdirectory_name = self.format_filename(subdirectory_name, pnginfo_dict)
             full_output_folder = os.path.join(self.output_dir, subdirectory_name)
             filename = filename_prefix
 
-        results = list()
-        
-        # Create the output folder if it doesn't exist
         os.makedirs(full_output_folder, exist_ok=True)
 
+        results = list()
+        images_length = len(images)
+        last_image_filename = None
+
+        # Process each image
         for batch_number, image in enumerate(images):
             i = 255. * image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+
+            # Prepare metadata
             metadata = self.prepare_pnginfo(pnginfo, pnginfo_dict, batch_number, images_length, prompt, extra_pnginfo, metadata_scope)
-            
-            # Add user extra metadata to image metadata
             for key, value in extra_metadata.items():
                 metadata.add_text(key, value)
 
-            # Include batch number only if batch size > 1
-            filename_with_batch_num = f"{filename}_{batch_number:05}" if images_length else filename
-            file = f"{filename_with_batch_num}.{base_format}"
+            # Handle filename collision and batch number inclusion
+            file = f"{filename}_{batch_number:05d}.{base_format}" if include_batch_num else f"{filename}.{base_format}"
             path = os.path.join(full_output_folder, file)
 
-            # Ensure the filename is unique
+            # Check for filename collision (using next available name)
             if os.path.exists(path):
-                file = self.find_next_available_filename(full_output_folder, filename_with_batch_num, base_format)
+                count = self.find_next_available_filename(full_output_folder, filename, base_format)
+                file = f"{filename}_{count:05d}.{base_format}"
                 path = os.path.join(full_output_folder, file)
 
+            last_image_filename = file
             quality_value = self.get_quality_value(quality)
-            
-            # Save the image
+
+            # Save image based on format
             if base_format == "webp":
                 img.save(path, "WEBP", lossless=(quality_value == 100), quality=quality_value)
             elif base_format == "png":
@@ -205,11 +205,11 @@ class SaveImageWithMetaData:
 
             results.append({"filename": file, "subfolder": full_output_folder, "type": self.type})
 
-        # Save the JSON metadata for the whole batch once
-        if save_workflow_json and images_length > 0:
-            last_batch_number = images_length - 1
-            json_filename = f"{filename}_{last_batch_number:05}.json" if include_batch_num else f"{filename}.json"
+        # Save workflow metadata for the batch
+        if save_workflow_json and images_length > 0 and last_image_filename:
+            json_filename = last_image_filename.replace(base_format, "json")
             batch_json_file = os.path.join(full_output_folder, json_filename)
+            
             with open(batch_json_file, "w", encoding="utf-8") as f:
                 json.dump(extra_pnginfo["workflow"], f)
 
