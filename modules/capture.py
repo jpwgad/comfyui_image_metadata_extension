@@ -5,6 +5,7 @@ from . import hook
 from .defs.captures import CAPTURE_FIELD_LIST
 from .defs.meta import MetaField
 from .defs.formatters import calc_lora_hash, calc_model_hash, extract_embedding_names, extract_embedding_hashes
+from .utils.log import print_warning
 
 from nodes import NODE_CLASS_MAPPINGS
 from .trace import Trace
@@ -123,7 +124,7 @@ class Capture:
         # Prompts
         positive = extract(MetaField.POSITIVE_PROMPT, "Positive prompt") or ""
         if not positive.strip():
-            print("[ComfyUI Image Metadata Extension] WARNING: Positive prompt is empty!")
+            print_warning("Positive prompt is empty!")
 
         negative = extract(MetaField.NEGATIVE_PROMPT, "Negative prompt") or ""
         lora_strings, lora_hashes = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
@@ -137,7 +138,7 @@ class Capture:
 
         # Sampling params
         if not extract(MetaField.STEPS, "Steps"):
-            print("[ComfyUI Image Metadata Extension] WARNING: Steps are empty, full metadata won't be added!")
+            print_warning("Steps are empty, full metadata won't be added!")
             return {}  # No sense in pnginfo without the Steps parameter, ref https://github.com/civitai/civitai/blob/7c8f3f3044218cf3b3d86bd9f49d12fc196ea1f6/src/utils/metadata/automatic.metadata.ts#L102C42-L102C47
 
         samplers = inputs_before_sampler_node.get(MetaField.SAMPLER_NAME)

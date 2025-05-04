@@ -1,5 +1,6 @@
 import os
 import folder_paths
+from ..utils.log import print_warning
 
 embedding_directory = folder_paths.get_folder_paths("embeddings")
 
@@ -30,6 +31,6 @@ def get_embedding_file_path(name):
             return path
 
     except Exception as e:
-        print(f"[ComfyUI Image Metadata Extension] WARNING: embedding not found '{name}': {e}")
+        print_warning(f"embedding not found '{name}': {e}")
 
     return None

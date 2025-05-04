@@ -1,6 +1,6 @@
 from collections import deque, defaultdict
 from .defs.samplers import SAMPLERS
-
+from .utils.log import print_warning
 
 class Trace:
     _trace_cache = {}
@@ -83,7 +83,7 @@ class Trace:
         node = cls.find_node_by_class_types(trace_tree, set(SAMPLERS.keys()))
         if node:
             return node
-        print("[ComfyUI Image Metadata Extension] WARNING: Could not find a sampler node in the trace tree!")
+        print_warning("Could not find a sampler node in the trace tree!")
 
     @classmethod
     def filter_inputs_by_trace_tree(cls, inputs, trace_tree):
