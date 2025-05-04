@@ -284,9 +284,27 @@ class Capture:
                     node = prompt.get(ref)
                     return node.get("inputs", {}).get("text") if node else None
 
-                _append_metadata(MetaField.POSITIVE_PROMPT, pos_ref, resolve_text(pos_ref))
-                _append_metadata(MetaField.NEGATIVE_PROMPT, neg_ref, resolve_text(neg_ref))
-                # TODO: Add embedding metadata collection
+                pos_text = resolve_text(pos_ref)
+                neg_text = resolve_text(neg_ref)
+                
+                # Append positive and negative prompts
+                _append_metadata(MetaField.POSITIVE_PROMPT, pos_ref, pos_text)
+                _append_metadata(MetaField.NEGATIVE_PROMPT, neg_ref, neg_text)
+
+                # Add embedding metadata collection
+                if pos_text:
+                    embedding_names = extract_embedding_names(pos_text)
+                    embedding_hashes = extract_embedding_hashes(pos_text)
+                    for name, hash_ in zip(embedding_names, embedding_hashes):
+                        _append_metadata(MetaField.EMBEDDING_NAME, node_id, name)
+                        _append_metadata(MetaField.EMBEDDING_HASH, node_id, hash_)
+
+                if neg_text:
+                    embedding_names = extract_embedding_names(neg_text)
+                    embedding_hashes = extract_embedding_hashes(neg_text)
+                    for name, hash_ in zip(embedding_names, embedding_hashes):
+                        _append_metadata(MetaField.EMBEDDING_NAME, node_id, name)
+                        _append_metadata(MetaField.EMBEDDING_HASH, node_id, hash_)
 
     @classmethod
     def extract_model_info(cls, inputs, meta_field_name, prefix):

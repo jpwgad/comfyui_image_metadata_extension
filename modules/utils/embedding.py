@@ -1,45 +1,35 @@
 import os
-from comfy.sd1_clip import expand_directory_list
+import folder_paths
 
-def get_embedding_file_path(embedding_name, clip):
+embedding_directory = folder_paths.get_folder_paths("embeddings")
+
+def get_embedding_file_path(name):
     """
-    Resolves the file path for an embedding by searching directories and checking file extensions.
+    Resolve the file path for the given embedding name.
 
     Args:
-        embedding_name (str): The name of the embedding file (without an extension).
-        clip (object): Object containing `embedding_directory` specifying directories to search.
+        name (str): The name of the embedding (without extension).
 
     Returns:
-        str or None: Full path to the embedding file if found, otherwise None.
+        str | None: The resolved file path, or None if not found.
     """
-    # Validate embedding_directory
-    embedding_directory = getattr(clip, "embedding_directory", None)
-    if not embedding_directory:
-        return None
-    
-    embedding_directory = (
-        [embedding_directory] if isinstance(embedding_directory, str) else embedding_directory
-    )
-
-    # Expand directories
     try:
-        embedding_directory = expand_directory_list(embedding_directory)
-    except Exception:
-        return None
+        extensions = ["", ".safetensors", ".pt", ".bin"]
 
-    if not embedding_directory:
-        return None
+        for embed_dir in embedding_directory:
+            if not os.path.isdir(embed_dir):
+                continue
 
-    extensions = ["", ".safetensors", ".pt", ".bin"]
+            for ext in extensions:
+                path = os.path.join(embed_dir, name + ext)
+                if os.path.isfile(path):
+                    return path
 
-    for embed_dir in embedding_directory:
-        embed_dir = os.path.abspath(embed_dir)
-        if not os.path.isdir(embed_dir):
-            continue  # Skip invalid directories
+        path = folder_paths.get_full_path("embeddings", name)
+        if os.path.isfile(path):
+            return path
 
-        for ext in extensions:
-            candidate_path = os.path.join(embed_dir, embedding_name + ext)
-            if os.path.isfile(candidate_path):
-                return candidate_path  # Return immediately when a valid file is found
+    except Exception as e:
+        print(f"[ComfyUI Image Metadata Extension] WARNING: embedding not found '{name}': {e}")
 
-    return None  # Return None if no file is found
+    return None

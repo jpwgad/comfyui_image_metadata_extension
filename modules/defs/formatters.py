@@ -54,62 +54,12 @@ def get_scaled_height(scaled_by, input_data):
 embedding_pattern = re.compile(r"embedding:\(?([^\s),]+)\)?")
 
 def _extract_embedding_names_from_text(text):
-    embedding_identifier = "embedding:"
+    return [match.group(1) for match in embedding_pattern.finditer(text)] if "embedding:" in text else []
 
-    # Check if 'embedding:' exists in the text
-    if embedding_identifier not in text:
-        return []
-    
-    # Extract matches
-    embedding_names = [match.group(1) for match in embedding_pattern.finditer(text)]
-
-    return embedding_names
-
-def extract_embedding_names(text, clip=None):
+def extract_embedding_names(text, input_data=None):
     return _extract_embedding_names_from_text(text)
 
-def extract_embedding_hashes(text, input_data):
-    embedding_names, clip = _extract_embedding_names(text, input_data)
-
-    if not clip:
-        return []
-
-    embedding_hashes = []
-    for name in embedding_names:
-        path = get_embedding_file_path(name, clip)
-        embedding_hashes.append(calc_hash(path) if path else "")
-
-    return embedding_hashes
-
-# Helper function to get clip from the tokenizer
-def get_clip_from_tokenizer(tokenizer):
-    if isinstance(tokenizer, (SD1Tokenizer, SD3Tokenizer, SDXLTokenizer, FluxTokenizer)):
-        return tokenizer.clip_l
-    elif isinstance(tokenizer, SD2Tokenizer):
-        return tokenizer.clip_h
-    return None
-
-# Extract embedding names from text
-def _extract_embedding_names(text, input_data):
-    clip_ = input_data[0].get("clip", [None])[0]
-    clip = get_clip_from_tokenizer(clip_.tokenizer) if clip_ else None
-
-    if not clip or not hasattr(clip, "embedding_directory"):
-        return [], None
-
-    text = ''.join(text)
-    
-    # Extract embedding names
-    embedding_names = set(_extract_embedding_names_from_text(text))
-
-    # Escape and tokenize if necessary
-    text = escape_important(text)
-    parsed_weights = token_weights(text, 1.0)
-
-    embedding_names.update(
-        match.group(1)
-        for segment, _ in parsed_weights
-        for match in re.finditer(embedding_pattern, unescape_important(segment))
-    )
-
-    return list(embedding_names), clip
+def extract_embedding_hashes(text, input_data=None):
+    names = extract_embedding_names(text)
+    hashes = [calc_hash(get_embedding_file_path(name)) or "" for name in names]
+    return hashes
