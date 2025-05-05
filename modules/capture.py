@@ -330,6 +330,9 @@ class Capture:
 
     @classmethod
     def gen_parameters_str(cls, pnginfo_dict):
+        if not pnginfo_dict or not isinstance(pnginfo_dict, dict):
+            return ""
+
         def clean_value(value):
             if value is None:
                 return ""
@@ -345,7 +348,7 @@ class Capture:
 
         s_list = [
             f"{k}: {v}"
-            for k, v in cleaned_dict.items() 
+            for k, v in cleaned_dict.items()
             if k not in {"Positive prompt", "Negative prompt"} and v not in {None, ""}
         ]
 
