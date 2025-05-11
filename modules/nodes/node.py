@@ -243,16 +243,17 @@ class SaveImageWithMetaData:
         if metadata_scope == MetadataScope.NONE:
             return None
 
-        pnginfo_copy = pnginfo_dict.copy()
+        if pnginfo_dict:
+            pnginfo_copy = pnginfo_dict.copy()
 
-        if total_images > 1:
-            pnginfo_copy["Batch index"] = batch_number
-            pnginfo_copy["Batch size"] = total_images
+            if total_images > 1:
+                pnginfo_copy["Batch index"] = batch_number
+                pnginfo_copy["Batch size"] = total_images
 
-        if metadata_scope == MetadataScope.FULL:
-            parameters = Capture.gen_parameters_str(pnginfo_copy)
-            if parameters and "Steps" in parameters:
-                metadata.add_text("parameters", parameters)
+            if metadata_scope == MetadataScope.FULL:
+                parameters = Capture.gen_parameters_str(pnginfo_copy)
+                if parameters and "Steps" in parameters:
+                    metadata.add_text("parameters", parameters)
 
         if prompt is not None and metadata_scope != "workflow_only":
             metadata.add_text("prompt", json.dumps(prompt))
