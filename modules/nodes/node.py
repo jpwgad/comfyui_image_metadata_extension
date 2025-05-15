@@ -95,6 +95,10 @@ class SaveImageWithMetaData:
                     "default": True,
                     "tooltip": "Include batch number in filename."
                 }),
+                "collect_asc": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Prefer selecting the value from the node that is farther away."
+                }),
             },
             "hidden": {
                 "prompt": "PROMPT",
@@ -133,12 +137,12 @@ class SaveImageWithMetaData:
         while f"{name}_{i:05d}" in existing:
             i += 1
         return i
-    
+
     @classmethod
     def parse_filename_placeholders(cls, filename: str) -> list[str]:
         """Extracts placeholder segments like %seed%, %pprompt:32%, etc."""
         return re.findall(cls.pattern_format, filename) if "%" in filename else []
-    
+
     def needs_pnginfo_in_filename(self, segments: list[str]) -> bool:
         for segment in segments:
             parts = segment.strip("%").split(":")
@@ -149,18 +153,18 @@ class SaveImageWithMetaData:
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
                     extra_pnginfo=None, extra_metadata=None, output_format="png",
                     quality="max", metadata_scope="full",
-                    include_batch_num=True, pnginfo_dict=None):
+                    include_batch_num=True, collect_asc=True, pnginfo_dict=None):
 
         extra_metadata = extra_metadata or {}
         base_format, save_workflow_json = self.parse_output_format(output_format)
         pnginfo = PngInfo()
-        
+
         # Parse filename
         filename_prefix = filename_prefix.strip()
         segments = self.parse_filename_placeholders(filename_prefix)
 
         if metadata_scope == MetadataScope.FULL or self.needs_pnginfo_in_filename(segments):
-            pnginfo_dict = pnginfo_dict or self.gen_pnginfo(prompt)
+            pnginfo_dict = pnginfo_dict or self.gen_pnginfo(prompt, collect_asc)
 
         filename_prefix = self.format_filename(filename_prefix, pnginfo_dict or {}, segments) + self.prefix_append
         subdirectory_name = self.format_filename(subdirectory_name, pnginfo_dict or {})
@@ -230,7 +234,7 @@ class SaveImageWithMetaData:
         if save_workflow_json and images_length > 0 and last_image_filename:
             json_filename = last_image_filename.replace(base_format, "json")
             batch_json_file = os.path.join(full_output_folder, json_filename)
-            
+
             with open(batch_json_file, "w", encoding="utf-8") as f:
                 json.dump(extra_pnginfo["workflow"], f)
 
@@ -265,15 +269,15 @@ class SaveImageWithMetaData:
         return metadata
 
     @classmethod
-    def gen_pnginfo(s, prompt):
+    def gen_pnginfo(s, prompt, collect_asc):
         inputs = Capture.get_inputs()
         trace_tree_from_this_node = Trace.trace(hook.current_save_image_node_id, prompt)
-        inputs_before_this_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_this_node)
+        inputs_before_this_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_this_node, collect_asc)
 
         sampler_node_id = Trace.find_sampler_node_id(trace_tree_from_this_node)
         if sampler_node_id:
             trace_tree_from_sampler_node = Trace.trace(sampler_node_id, prompt)
-            inputs_before_sampler_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_sampler_node)
+            inputs_before_sampler_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_sampler_node, collect_asc)
         else:
             inputs_before_sampler_node = {}
 
@@ -367,7 +371,7 @@ class CreateExtraMetaData:
         for i in range(1, 5):
             key = keys_values.get(f"key{i}", "").strip()
             value = keys_values.get(f"value{i}", "").strip()
-            
+
             if key:
                 extra_metadata[key] = value
             elif value:

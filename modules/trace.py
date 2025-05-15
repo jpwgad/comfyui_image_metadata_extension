@@ -86,7 +86,7 @@ class Trace:
         print_warning("Could not find a sampler node in the trace tree!")
 
     @classmethod
-    def filter_inputs_by_trace_tree(cls, inputs, trace_tree):
+    def filter_inputs_by_trace_tree(cls, inputs, trace_tree, collect_asc):
         filtered_inputs = defaultdict(list)
         for meta, input_list in inputs.items():
             for node_id, input_value in input_list:
@@ -95,6 +95,6 @@ class Trace:
                     filtered_inputs[meta].append((node_id, input_value, trace[0]))
 
         for key in filtered_inputs:
-            filtered_inputs[key].sort(key=lambda x: x[2])  # Sort by distance
+            filtered_inputs[key].sort(key=lambda x: x[2], reverse=not collect_asc)  # Sort by distance asc/desc
 
         return filtered_inputs
