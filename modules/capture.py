@@ -115,10 +115,31 @@ class Capture:
             cls._collect_all_metadata(prompt, inputs_before_sampler_node)
 
         def extract(meta_key, label, source=inputs_before_sampler_node):
-            val = source.get(meta_key)
-            if val and len(val[0]) > 1 and val[0][1] is not None:
-                pnginfo[label] = val[0][1]
-                return val[0][1]
+            """
+            Scan the list behind `meta_key` and return the first payload that:
+              1) is present (link has at least two elements),
+              2) is not None,
+              3) if it's a string, the string is not empty.
+            Once found, it stores the value in `pnginfo[label]` and exits early.
+            """
+            # Retrieve the list associated with `meta_key`; default to an empty list
+            val_list = source.get(meta_key, [])
+            # Traverse the list in the original order (front to back)
+            for link in val_list:
+                # Guard against malformed link entries with length < 2
+                if len(link) <= 1:
+                    continue
+                candidate = link[1]
+                # Skip if None
+                if candidate is None:
+                    continue
+                # If candidate is a string, skip empty ones
+                if isinstance(candidate, str) and not candidate:
+                    continue
+                # First valid payload found – save and return immediately
+                pnginfo[label] = candidate
+                return candidate
+            # No valid payload found
             return None
 
         # Prompts
