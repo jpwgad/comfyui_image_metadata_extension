@@ -95,9 +95,9 @@ class SaveImageWithMetaData:
                     "default": True,
                     "tooltip": "Include batch number in filename."
                 }),
-                "collect_asc": ("BOOLEAN", {
+                "prefer_nearest": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Prefer selecting the value from the node that is farther away."
+                    "tooltip": "Select inputs from closest nodes first if true."
                 }),
             },
             "hidden": {
@@ -153,7 +153,7 @@ class SaveImageWithMetaData:
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
                     extra_pnginfo=None, extra_metadata=None, output_format="png",
                     quality="max", metadata_scope="full",
-                    include_batch_num=True, collect_asc=True, pnginfo_dict=None):
+                    include_batch_num=True, prefer_nearest=True, pnginfo_dict=None):
 
         extra_metadata = extra_metadata or {}
         base_format, save_workflow_json = self.parse_output_format(output_format)
@@ -164,7 +164,7 @@ class SaveImageWithMetaData:
         segments = self.parse_filename_placeholders(filename_prefix)
 
         if metadata_scope == MetadataScope.FULL or self.needs_pnginfo_in_filename(segments):
-            pnginfo_dict = pnginfo_dict or self.gen_pnginfo(prompt, collect_asc)
+            pnginfo_dict = pnginfo_dict or self.gen_pnginfo(prompt, prefer_nearest)
 
         filename_prefix = self.format_filename(filename_prefix, pnginfo_dict or {}, segments) + self.prefix_append
         subdirectory_name = self.format_filename(subdirectory_name, pnginfo_dict or {})
@@ -269,15 +269,15 @@ class SaveImageWithMetaData:
         return metadata
 
     @classmethod
-    def gen_pnginfo(s, prompt, collect_asc):
+    def gen_pnginfo(s, prompt, prefer_nearest):
         inputs = Capture.get_inputs()
         trace_tree_from_this_node = Trace.trace(hook.current_save_image_node_id, prompt)
-        inputs_before_this_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_this_node, collect_asc)
+        inputs_before_this_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_this_node, prefer_nearest)
 
         sampler_node_id = Trace.find_sampler_node_id(trace_tree_from_this_node)
         if sampler_node_id:
             trace_tree_from_sampler_node = Trace.trace(sampler_node_id, prompt)
-            inputs_before_sampler_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_sampler_node, collect_asc)
+            inputs_before_sampler_node = Trace.filter_inputs_by_trace_tree(inputs, trace_tree_from_sampler_node, prefer_nearest)
         else:
             inputs_before_sampler_node = {}
 
