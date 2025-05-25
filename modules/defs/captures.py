@@ -13,6 +13,19 @@ from .formatters import (
     extract_embedding_hashes,
 )
 
+def is_latent_excuted(node_id, obj, prompt, extra_data, outputs, input_data_all):
+    """Return scaled width or fall back to scaled_by when sample path is missing."""
+    try:
+        # Attempt to reach the ndarray: input_data[0]["samples"][0]["samples"]
+        samples = input_data_all[0]["samples"][0]["samples"]
+        # If samples exists, compute the width with SCALING_FACTOR
+        if samples is not None:
+            return True
+    except (KeyError, IndexError, TypeError, AttributeError):
+        # Any failure in the lookup chain or missing attribute -> graceful fallback
+        pass
+    # Default path: structure changed, simply return the incoming scale
+    return False
 
 CAPTURE_FIELD_LIST = {
     "CheckpointLoaderSimple": {
@@ -71,10 +84,11 @@ CAPTURE_FIELD_LIST = {
         MetaField.IMAGE_HEIGHT: {"field_name": "height"},
     },
     "LatentUpscaleBy": {
-        MetaField.IMAGE_WIDTH: {"field_name": "scale_by", "format": get_scaled_width},
+        MetaField.IMAGE_WIDTH: {"field_name": "scale_by", "format": get_scaled_width, "validate": is_latent_excuted},
         MetaField.IMAGE_HEIGHT: {
             "field_name": "scale_by",
             "format": get_scaled_height,
+            "validate": is_latent_excuted
         },
     },
     "LoraLoader": {
