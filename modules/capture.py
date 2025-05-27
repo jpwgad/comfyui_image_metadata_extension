@@ -19,7 +19,10 @@ class Capture:
         inputs = {}
         prompt = hook.current_prompt
         extra_data = hook.current_extra_data
-        outputs = hook.prompt_executer.caches.outputs
+        if hook.prompt_executer and hook.prompt_executer.caches:
+            outputs = hook.prompt_executer.caches.outputs
+        else:
+            outputs = None
 
         for node_id, obj in prompt.items():
             class_type = obj["class_type"]
