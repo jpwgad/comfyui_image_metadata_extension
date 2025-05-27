@@ -117,6 +117,9 @@ class Capture:
             inputs_before_sampler_node = defaultdict(list)
             cls._collect_all_metadata(prompt, inputs_before_sampler_node)
 
+        def is_simple(value):
+            return isinstance(value, (str, int, float, bool)) or value is None
+        
         def extract(meta_key, label, source=inputs_before_sampler_node):
             """
             Scan the list behind `meta_key` and return the first payload that:
@@ -137,11 +140,16 @@ class Capture:
                 if candidate is None:
                     continue
                 # If candidate is a string, skip empty ones
-                if isinstance(candidate, str) and not candidate:
-                    continue
-                # First valid payload found – save and return immediately
-                pnginfo[label] = candidate
-                return candidate
+                if isinstance(candidate, str):
+                    if not candidate.strip():
+                        continue
+                elif not is_simple(candidate):
+                    continue # Skip lists, dicts, etc.
+
+                value = str(candidate)
+                pnginfo[label] = value
+                return value
+
             # No valid payload found
             return None
 
