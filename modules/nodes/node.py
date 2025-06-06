@@ -38,6 +38,7 @@ class QualityOption(str, Enum):
 class MetadataScope(str, Enum):
     FULL = "full"
     DEFAULT = "default"
+    PARAMETERS_ONLY = "parameters_only"
     WORKFLOW_ONLY = "workflow_only"
     NONE = "none"
 
@@ -88,6 +89,7 @@ class SaveImageWithMetaData:
                     "tooltip": "Choose the metadata to save: "
                             "\n'full' - default metadata with additional metadata, "
                             "\n'default' - same as SaveImage node, "
+                            "\n'parameters_only' - only A1111-style metadata, "
                             "\n'workflow_only' - workflow metadata only, "
                             "\n'none' - no metadata."
                 }),
@@ -254,12 +256,14 @@ class SaveImageWithMetaData:
                 pnginfo_copy["Batch index"] = batch_number
                 pnginfo_copy["Batch size"] = total_images
 
-            if metadata_scope == MetadataScope.FULL:
+            if metadata_scope in [MetadataScope.FULL, MetadataScope.PARAMETERS_ONLY]:
                 parameters = Capture.gen_parameters_str(pnginfo_copy)
                 if parameters and "Steps" in parameters:
                     metadata.add_text("parameters", parameters)
+                    if metadata_scope == MetadataScope.PARAMETERS_ONLY:
+                        return metadata
 
-        if prompt is not None and metadata_scope != "workflow_only":
+        if prompt is not None and metadata_scope != MetadataScope.WORKFLOW_ONLY:
             metadata.add_text("prompt", json.dumps(prompt))
 
         if extra_pnginfo is not None:
