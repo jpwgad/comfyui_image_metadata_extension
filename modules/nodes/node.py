@@ -165,7 +165,7 @@ class SaveImageWithMetaData:
         filename_prefix = filename_prefix.strip()
         segments = self.parse_filename_placeholders(filename_prefix)
 
-        if metadata_scope == MetadataScope.FULL or self.needs_pnginfo_in_filename(segments):
+        if metadata_scope in [MetadataScope.FULL, MetadataScope.PARAMETERS_ONLY] or self.needs_pnginfo_in_filename(segments):
             pnginfo_dict = pnginfo_dict or self.gen_pnginfo(prompt, prefer_nearest)
 
         filename_prefix = self.format_filename(filename_prefix, pnginfo_dict or {}, segments) + self.prefix_append
