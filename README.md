@@ -23,6 +23,7 @@ Custom node for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). It adds ad
 - The `metadata_scope` option controls metadata inclusion:
   - **`full`** – default metadata with additional metadata.
   - **`default`** – same as the SaveImage node.
+  - **`parameters_only`** – only A1111-style metadata.
   - **`workflow_only`** – workflow metadata only.
   - **`none`** – no metadata.
 
