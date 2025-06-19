@@ -57,7 +57,7 @@ def get_lora_model_hash_stack(node_id, obj, prompt, extra_data, outputs, input_d
             lora_str = loras["name"]
             if lora_str == "":
                 continue
-            lora_names.append(calc_lora_hash(lora_str))
+            lora_names.append(calc_lora_hash(lora_str + ".safetensors"))
         return lora_names
     else:
         return []
