@@ -6,9 +6,6 @@ from ..meta import MetaField
 from ..formatters import calc_model_hash, calc_lora_hash, convert_skip_clip, calc_unet_hash
 
 
-# ref format:
-# '[{"name":"cecilia_shiro seijo to kuro bokushi_IllustriousXL_last","weight":0.5,"text_encoder_weight":0.5,
-# "lora":"cecilia_shiro seijo to kuro bokushi_IllustriousXL_last.safetensors","loraWorks":""}]'
 def get_lora_model_name_stack(node_id, obj, prompt, extra_data, outputs, input_data):
     toggled_on = input_data[0]["loras"]
 
