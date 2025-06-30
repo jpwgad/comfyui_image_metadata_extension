@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections import defaultdict
 from . import hook
 from .defs.captures import CAPTURE_FIELD_LIST
@@ -89,22 +90,53 @@ class Capture:
 
     @classmethod
     def get_lora_strings_and_hashes(cls, inputs_before_sampler_node):
+
+        prompt_texts = [
+            val[1]
+            for key in [MetaField.POSITIVE_PROMPT, MetaField.NEGATIVE_PROMPT]
+            for val in inputs_before_sampler_node.get(key, [])
+            if isinstance(val[1], str)
+        ]
+        prompt_joined = " ".join(prompt_texts).replace("\n", " ").replace("\r", " ").lower()
+
         lora_names = inputs_before_sampler_node.get(MetaField.LORA_MODEL_NAME, [])
         lora_weights = inputs_before_sampler_node.get(MetaField.LORA_STRENGTH_MODEL, [])
         lora_hashes = inputs_before_sampler_node.get(MetaField.LORA_MODEL_HASH, [])
 
-        lora_strings = []
-        lora_hashes_list = []
+        # Parse LoRAs in prompt
+        lora_names_from_prompt, lora_weights_from_prompt, lora_hashes_from_prompt = [], [], []
+        if "<lora:" in prompt_joined:
+            for text in prompt_texts:
+                for name, weight in re.findall(r"<lora:([^\s:<>]+):([\d.]+)>", text.replace("\n", " ").replace("\r", " ")):
+                    lora_names_from_prompt.append(("prompt_parse", name))
+                    lora_weights_from_prompt.append(("prompt_parse", float(weight)))
+                    lora_hashes_from_prompt.append(("prompt_parse", calc_lora_hash(name)))
 
-        for name, weight, hash_val in zip(lora_names, lora_weights, lora_hashes):
-            if not (name and weight and hash_val):
+        # Combine all sources
+        all_names = lora_names + lora_names_from_prompt
+        all_weights = lora_weights + lora_weights_from_prompt
+        all_hashes = lora_hashes + lora_hashes_from_prompt
+
+        def clean_name(n): 
+            return os.path.splitext(os.path.basename(n))[0].replace('\\', '_').replace('/', '_').replace(' ', '_').replace(':', '_')
+
+        grouped = defaultdict(list)
+        for name, weight, hsh in zip(all_names, all_weights, all_hashes):
+            if not (name and weight and hsh): 
                 continue
+            grouped[(hsh[1], weight[1])].append(clean_name(name[1]))
 
-            clean_name = os.path.splitext(os.path.basename(name[1]))[0].replace(' ', '_').replace(':', '_')
+        hashes_in_prompt = {h[1].lower() for h in lora_hashes_from_prompt}
 
-            # LoRA strings for prompt and "Hashes" list
-            lora_strings.append(f"<lora:{clean_name}:{weight[1]}>")
-            lora_hashes_list.append(f"{clean_name}: {hash_val[1]}")
+        lora_strings, lora_hashes_list = [], []
+
+        for (hsh, weight), names in grouped.items():
+            canonical = min(names, key=len)
+            present = hsh.lower() in hashes_in_prompt
+
+            if not present:
+                lora_strings.append(f"<lora:{canonical}:{weight}>")
+            lora_hashes_list.append(f"{canonical}: {hsh}")
 
         lora_hashes_string = ", ".join(lora_hashes_list)
         return lora_strings, lora_hashes_string
