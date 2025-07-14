@@ -90,6 +90,12 @@ class Capture:
 
     @classmethod
     def get_lora_strings_and_hashes(cls, inputs_before_sampler_node):
+        
+        def clean_name(n): 
+            return os.path.splitext(os.path.basename(n))[0].replace('\\', '_').replace('/', '_').replace(' ', '_').replace(':', '_')
+        
+        # Regex to match <lora:name:weight>
+        lora_assertion_re = re.compile(r"<(lora|lyco):([a-zA-Z0-9_\./\\-]+):([0-9.]+)>")
 
         prompt_texts = [
             val[1]
@@ -110,19 +116,19 @@ class Capture:
                 for name, weight in re.findall(r"<lora:([^\s:<>]+):([\d.]+)>", text.replace("\n", " ").replace("\r", " ")):
                     lora_names_from_prompt.append(("prompt_parse", name))
                     lora_weights_from_prompt.append(("prompt_parse", float(weight)))
-                    lora_hashes_from_prompt.append(("prompt_parse", calc_lora_hash(name)))
+
+                    h = calc_lora_hash(name)
+                    if h:
+                        lora_hashes_from_prompt.append(("prompt_parse", h))
 
         # Combine all sources
         all_names = lora_names + lora_names_from_prompt
         all_weights = lora_weights + lora_weights_from_prompt
         all_hashes = lora_hashes + lora_hashes_from_prompt
 
-        def clean_name(n): 
-            return os.path.splitext(os.path.basename(n))[0].replace('\\', '_').replace('/', '_').replace(' ', '_').replace(':', '_')
-
         grouped = defaultdict(list)
         for name, weight, hsh in zip(all_names, all_weights, all_hashes):
-            if not (name and weight and hsh): 
+            if not (name and weight and hsh):
                 continue
             grouped[(hsh[1], weight[1])].append(clean_name(name[1]))
 
@@ -138,8 +144,19 @@ class Capture:
                 lora_strings.append(f"<lora:{canonical}:{weight}>")
             lora_hashes_list.append(f"{canonical}: {hsh}")
 
+        # Rewrite prompt with cleaned names
+        updated_prompts = []
+        if "<lora:" in prompt_joined:
+            for text in prompt_texts:
+                def replace(m):
+                    tag, raw_name, weight = m.group(1), m.group(2), m.group(3)
+                    return f"<{tag}:{clean_name(raw_name)}:{weight}>"
+                updated_prompts.append(lora_assertion_re.sub(replace, text))
+        else:
+            updated_prompts = prompt_texts
+
         lora_hashes_string = ", ".join(lora_hashes_list)
-        return lora_strings, lora_hashes_string
+        return lora_strings, lora_hashes_string, updated_prompts
 
     @classmethod
     def gen_pnginfo_dict(cls, inputs_before_sampler_node, inputs_before_this_node, prompt, save_civitai_sampler=True):
@@ -191,10 +208,11 @@ class Capture:
             print_warning("Positive prompt is empty!")
 
         negative = extract(MetaField.NEGATIVE_PROMPT, "Negative prompt") or ""
-        lora_strings, lora_hashes = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
+        lora_strings, lora_hashes, updated_prompts = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
         # Append Lora models to the positive prompt, which is required for the Civitai website to parse and apply Lora weights.
         # Format: <lora:Lora_Model_Name:weight_value>. Example: <lora:Lora_Name_00:0.6> <lora:Lora_Name_01:0.8>
         if lora_strings:
+            positive = updated_prompts[0] if updated_prompts else positive
             positive += " " + " ".join(lora_strings)
 
         pnginfo["Positive prompt"] = positive.strip()
