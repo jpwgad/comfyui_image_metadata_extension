@@ -90,11 +90,11 @@ class Capture:
 
     @classmethod
     def get_lora_strings_and_hashes(cls, inputs_before_sampler_node):
-        
-        def clean_name(n): 
+
+        def clean_name(n):
             return os.path.splitext(os.path.basename(n))[0].replace('\\', '_').replace('/', '_').replace(' ', '_').replace(':', '_')
-        
-        # Regex to match <lora:name:weight>
+
+        # Regex to match <lora:name:weight>, based on https://github.com/civitai/civitai/blob/main/src/utils/prompt-helpers.ts
         lora_assertion_re = re.compile(r"<(lora|lyco):([a-zA-Z0-9_\./\\-]+):([0-9.]+)>")
 
         prompt_texts = [
@@ -113,7 +113,7 @@ class Capture:
         lora_names_from_prompt, lora_weights_from_prompt, lora_hashes_from_prompt = [], [], []
         if "<lora:" in prompt_joined:
             for text in prompt_texts:
-                for name, weight in re.findall(r"<lora:([^\s:<>]+):([\d.]+)>", text.replace("\n", " ").replace("\r", " ")):
+                for _, name, weight in re.findall(lora_assertion_re, text.replace("\n", " ").replace("\r", " ")):
                     lora_names_from_prompt.append(("prompt_parse", name))
                     lora_weights_from_prompt.append(("prompt_parse", float(weight)))
 
@@ -209,10 +209,14 @@ class Capture:
 
         negative = extract(MetaField.NEGATIVE_PROMPT, "Negative prompt") or ""
         lora_strings, lora_hashes, updated_prompts = cls.get_lora_strings_and_hashes(inputs_before_sampler_node)
-        # Append Lora models to the positive prompt, which is required for the Civitai website to parse and apply Lora weights.
+        
+        # If there are LoRAs in the prompt, use the cleaned version of the prompt.
+        if updated_prompts:
+            positive = updated_prompts[0]
+            
+        # Append LoRA models to the positive prompt, which is required for the Civitai website to parse and apply LoRA weights.
         # Format: <lora:Lora_Model_Name:weight_value>. Example: <lora:Lora_Name_00:0.6> <lora:Lora_Name_01:0.8>
         if lora_strings:
-            positive = updated_prompts[0] if updated_prompts else positive
             positive += " " + " ".join(lora_strings)
 
         pnginfo["Positive prompt"] = positive.strip()
