@@ -422,15 +422,19 @@ class Capture:
         def clean_value(value):
             if value is None:
                 return ""
-            value = str(value).strip()
-            return value.replace("\n", " ")
+            return str(value).strip().replace("\n", " ")
+
+        def strip_embedding_prefix(text):
+            return text.replace("embedding:", "")
 
         cleaned_dict = {k: clean_value(v) for k, v in pnginfo_dict.items()}
 
-        result = [cleaned_dict.get("Positive prompt", "")]
-        negative_prompt = cleaned_dict.get("Negative prompt")
-        if negative_prompt:
-            result.append(f"Negative prompt: {negative_prompt}")
+        pos = strip_embedding_prefix(cleaned_dict.get("Positive prompt", ""))
+        neg = strip_embedding_prefix(cleaned_dict.get("Negative prompt", ""))
+
+        result = [pos]
+        if neg:
+            result.append(f"Negative prompt: {neg}")
 
         s_list = [
             f"{k}: {v}"
