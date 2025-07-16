@@ -3,6 +3,68 @@ from ..meta import MetaField
 from ..formatters import calc_model_hash, calc_lora_hash, calc_vae_hash, convert_skip_clip
 import re
 
+
+def get_lora_model_names(node_id, obj, prompt, extra_data, outputs, input_data):
+    lora_name = input_data[0]["lora_name"]
+
+    lora_names = []
+
+    # check against 'lora_name': ['None']
+    if lora_name[0] != "None":
+        lora_names.append(lora_name[0])
+
+    # 'optional_lora_stack': [[('Style/Smooth_Booster_v3.safetensors', 0.3, 0.6)]]
+    optional_lora_stack = input_data[0]["optional_lora_stack"][0]
+    if len(optional_lora_stack) != 0:
+        for lora in optional_lora_stack:
+            lora_names.append(lora[0])
+
+    return lora_names
+
+
+def get_lora_model_hashes(node_id, obj, prompt, extra_data, outputs, input_data):
+    lora_names = get_lora_model_names(node_id, obj, prompt, extra_data, outputs, input_data)
+
+    lora_hashes = []
+
+    for name in lora_names:
+        lora_hashes.append(calc_lora_hash(name))
+
+    return lora_hashes
+
+
+def get_lora_strengths(node_id, obj, prompt, extra_data, outputs, input_data):
+    lora_strengths = []
+
+    # check against 'lora_name': ['None']
+    if input_data[0]["lora_name"][0] != "None":
+        lora_strengths.append(input_data[0]["lora_model_strength"][0])
+
+    # 'optional_lora_stack': [[('Style/Smooth_Booster_v3.safetensors', 0.3, 0.6)]]
+    optional_lora_stack = input_data[0]["optional_lora_stack"][0]
+    if len(optional_lora_stack) != 0:
+        for lora in optional_lora_stack:
+            lora_strengths.append(lora[1])
+
+    return lora_strengths
+
+
+def get_lora_clip_strengths(node_id, obj, prompt, extra_data, outputs, input_data):
+    lora_clip_strengths = []
+
+    # check against 'lora_name': ['None']
+    if input_data[0]["lora_name"][0] != "None":
+        lora_clip_strengths.append(input_data[0]["lora_clip_strength"][0])
+
+    # 'optional_lora_stack': [[('Style/Smooth_Booster_v3.safetensors', 0.3, 0.6)]]
+    optional_lora_stack = input_data[0]["optional_lora_stack"][0]
+    if len(optional_lora_stack) != 0:
+        for lora in optional_lora_stack:
+            lora_clip_strengths.append(lora[2])
+
+    return lora_clip_strengths
+
+
 def get_lora_model_name_stack(node_id, obj, prompt, extra_data, outputs, input_data):
     toggled_on = input_data[0]["toggle"][0]
     
@@ -93,10 +155,10 @@ CAPTURE_FIELD_LIST = {
         MetaField.NEGATIVE_PROMPT: {"field_name": "negative"},
         MetaField.IMAGE_WIDTH: {"field_name": "empty_latent_width"},
         MetaField.IMAGE_HEIGHT: {"field_name": "empty_latent_height"},
-        MetaField.LORA_MODEL_NAME: {"field_name": "lora_name"},
-        MetaField.LORA_MODEL_HASH: {"selector": get_lora_model_hash},
-        MetaField.LORA_STRENGTH_MODEL: {"field_name": "lora_model_strength"},
-        MetaField.LORA_STRENGTH_CLIP: {"field_name": "lora_clip_strength"},
+        MetaField.LORA_MODEL_NAME: {"selector": get_lora_model_names},
+        MetaField.LORA_MODEL_HASH: {"selector": get_lora_model_hashes},
+        MetaField.LORA_STRENGTH_MODEL: {"selector": get_lora_strengths},
+        MetaField.LORA_STRENGTH_CLIP: {"selector": get_lora_clip_strengths},
     },
     "easy comfyLoader": {
         MetaField.MODEL_NAME: {"field_name": "ckpt_name"},
