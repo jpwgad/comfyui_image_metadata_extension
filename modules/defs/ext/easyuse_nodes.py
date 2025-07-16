@@ -1,6 +1,6 @@
 # https://github.com/yolain/ComfyUI-Easy-Use
 from ..meta import MetaField
-from ..formatters import calc_model_hash, calc_lora_hash, convert_skip_clip
+from ..formatters import calc_model_hash, calc_lora_hash, calc_vae_hash, convert_skip_clip
 import re
 
 def get_lora_model_name_stack(node_id, obj, prompt, extra_data, outputs, input_data):
@@ -86,6 +86,8 @@ CAPTURE_FIELD_LIST = {
     "easy fullLoader": {
         MetaField.MODEL_NAME: {"field_name": "ckpt_name"},
         MetaField.MODEL_HASH: {"field_name": "ckpt_name", "format": calc_model_hash},
+        MetaField.VAE_NAME: {"field_name": "vae_name"},
+        MetaField.VAE_HASH: {"field_name": "vae_name", "format": calc_vae_hash},
         MetaField.CLIP_SKIP: {"field_name": "clip_skip", "format": convert_skip_clip},
         MetaField.POSITIVE_PROMPT: {"field_name": "positive"},
         MetaField.NEGATIVE_PROMPT: {"field_name": "negative"},
