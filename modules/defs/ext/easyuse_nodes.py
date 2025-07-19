@@ -1,7 +1,21 @@
 # https://github.com/yolain/ComfyUI-Easy-Use
 from ..meta import MetaField
-from ..formatters import calc_model_hash, calc_lora_hash, calc_vae_hash, convert_skip_clip
+from ..formatters import calc_model_hash, calc_lora_hash, calc_vae_hash, convert_skip_clip, extract_embedding_hashes, extract_embedding_names
 import re
+
+
+def get_embedding_names(node_id, obj, prompt, extra_data, outputs, input_data):
+    embedding_names = extract_embedding_names(input_data[0]["positive"][0])
+    embedding_names += extract_embedding_names(input_data[0]["negative"][0])
+
+    return embedding_names
+
+
+def get_embedding_hashes(node_id, obj, prompt, extra_data, outputs, input_data):
+    embedding_hashes = extract_embedding_hashes(input_data[0]["positive"][0])
+    embedding_hashes += extract_embedding_hashes(input_data[0]["negative"][0])
+
+    return embedding_hashes
 
 
 def get_lora_model_names(node_id, obj, prompt, extra_data, outputs, input_data):
@@ -153,6 +167,8 @@ CAPTURE_FIELD_LIST = {
         MetaField.CLIP_SKIP: {"field_name": "clip_skip", "format": convert_skip_clip},
         MetaField.POSITIVE_PROMPT: {"field_name": "positive"},
         MetaField.NEGATIVE_PROMPT: {"field_name": "negative"},
+        MetaField.EMBEDDING_NAME: {"selector": get_embedding_names},
+        MetaField.EMBEDDING_HASH: {"selector": get_embedding_hashes},
         MetaField.IMAGE_WIDTH: {"field_name": "empty_latent_width"},
         MetaField.IMAGE_HEIGHT: {"field_name": "empty_latent_height"},
         MetaField.LORA_MODEL_NAME: {"selector": get_lora_model_names},
