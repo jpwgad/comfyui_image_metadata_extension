@@ -126,6 +126,11 @@ class Capture:
         all_weights = lora_weights + lora_weights_from_prompt
         all_hashes = lora_hashes + lora_hashes_from_prompt
 
+        # Update the metadata fields with combined information
+        inputs_before_sampler_node[MetaField.LORA_MODEL_NAME] = all_names
+        inputs_before_sampler_node[MetaField.LORA_STRENGTH_MODEL] = all_weights
+        inputs_before_sampler_node[MetaField.LORA_MODEL_HASH] = all_hashes
+
         grouped = defaultdict(list)
         for name, weight, hsh in zip(all_names, all_weights, all_hashes):
             if not (name and weight and hsh):
