@@ -28,8 +28,8 @@ def get_lora_model_names(node_id, obj, prompt, extra_data, outputs, input_data):
         lora_names.append(lora_name[0])
 
     # 'optional_lora_stack': [[('Style/Smooth_Booster_v3.safetensors', 0.3, 0.6)]]
-    optional_lora_stack = input_data[0]["optional_lora_stack"][0]
-    if len(optional_lora_stack) != 0:
+    if "optional_lora_stack" in input_data[0]:
+        optional_lora_stack = input_data[0]["optional_lora_stack"][0]
         for lora in optional_lora_stack:
             lora_names.append(lora[0])
 
@@ -55,8 +55,8 @@ def get_lora_strengths(node_id, obj, prompt, extra_data, outputs, input_data):
         lora_strengths.append(input_data[0]["lora_model_strength"][0])
 
     # 'optional_lora_stack': [[('Style/Smooth_Booster_v3.safetensors', 0.3, 0.6)]]
-    optional_lora_stack = input_data[0]["optional_lora_stack"][0]
-    if len(optional_lora_stack) != 0:
+    if "optional_lora_stack" in input_data[0]:
+        optional_lora_stack = input_data[0]["optional_lora_stack"][0]
         for lora in optional_lora_stack:
             lora_strengths.append(lora[1])
 
@@ -71,8 +71,8 @@ def get_lora_clip_strengths(node_id, obj, prompt, extra_data, outputs, input_dat
         lora_clip_strengths.append(input_data[0]["lora_clip_strength"][0])
 
     # 'optional_lora_stack': [[('Style/Smooth_Booster_v3.safetensors', 0.3, 0.6)]]
-    optional_lora_stack = input_data[0]["optional_lora_stack"][0]
-    if len(optional_lora_stack) != 0:
+    if "optional_lora_stack" in input_data[0]:
+        optional_lora_stack = input_data[0]["optional_lora_stack"][0]
         for lora in optional_lora_stack:
             lora_clip_strengths.append(lora[2])
 
