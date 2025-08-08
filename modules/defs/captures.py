@@ -142,37 +142,4 @@ CAPTURE_FIELD_LIST = {
         MetaField.CFG: {"field_name": "cfg"},
         MetaField.SEED: {"field_name": "noise_seed"},
     },
-    # RES4LYF compatibility
-    "SharkGuider": {
-        MetaField.CFG: {"field_name": "cfg"},
-    },
-    "SharkSampler": {
-        MetaField.SEED: {"field_name": "noise_seed"},
-        MetaField.STEPS: {"field_name": "steps"},
-        MetaField.CFG: {"field_name": "cfg"},
-        MetaField.SCHEDULER: {"field_name": "scheduler"},
-        MetaField.DENOISE: {"field_name": "denoise"},
-    },
-    "SharkSampler_Beta": {
-        MetaField.SEED: {"field_name": "noise_seed"},
-        MetaField.STEPS: {"field_name": "steps"},
-        MetaField.CFG: {"field_name": "cfg"},
-        MetaField.SCHEDULER: {"field_name": "scheduler"},
-        MetaField.DENOISE: {"field_name": "denoise"},
-    },
-    "SharkChainsampler_Beta": {
-        MetaField.CFG: {"field_name": "cfg"},
-    },
-    "ClownsharKSampler_Beta": {
-        MetaField.SEED: {"field_name": "seed"},
-        MetaField.STEPS: {"field_name": "steps"},
-        MetaField.CFG: {"field_name": "cfg"},
-        MetaField.SAMPLER_NAME: {"field_name": "sampler_name"},
-        MetaField.SCHEDULER: {"field_name": "scheduler"},
-        MetaField.DENOISE: {"field_name": "denoise"},
-    },
-    "ClownsharkChainsampler_Beta": {
-        MetaField.CFG: {"field_name": "cfg"},
-        MetaField.SAMPLER_NAME: {"field_name": "sampler_name"},
-    },
 }
