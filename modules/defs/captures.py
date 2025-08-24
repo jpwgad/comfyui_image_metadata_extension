@@ -132,6 +132,9 @@ CAPTURE_FIELD_LIST = {
         MetaField.SCHEDULER: {"field_name": "scheduler"},
         MetaField.DENOISE: {"field_name": "denoise"},
     },
+    "BetaSamplingScheduler": {
+        MetaField.STEPS: {"field_name": "steps"},
+    },
     "KSamplerSelect": {
         MetaField.SAMPLER_NAME: {"field_name": "sampler_name"},
     },
