@@ -299,6 +299,7 @@ class SaveImageWithMetaData:
         now = datetime.now()
         date_table = {
             "yyyy": f"{now.year}",
+            "YY": f"{now.year % 100:02d}",
             "MM": f"{now.month:02d}",
             "dd": f"{now.day:02d}",
             "hh": f"{now.hour:02d}",
@@ -328,7 +329,7 @@ class SaveImageWithMetaData:
                 prompt = pnginfo_dict.get(prompt_key, "")
                 if not prompt:
                     print_warning(f"{prompt_key} not found in pnginfo_dict!")
-                prompt = prompt.replace("\n", " ")
+                # prompt = prompt.replace("\n", " ")
                 length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
                 filename = filename.replace(segment, prompt[:length].strip() if length else prompt.strip())
 

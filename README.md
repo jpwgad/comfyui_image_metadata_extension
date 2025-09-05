@@ -78,6 +78,7 @@ Lora strings are automatically added to the prompt area, allowing the Civitai we
 | Identifier | Description                 |
 | ---------- | --------------------------- |
 | yyyy       | Year                        |
+| YY         | Year(2-digit)               |
 | MM         | Month                       |
 | dd         | Day                         |
 | hh         | Hour                        |
