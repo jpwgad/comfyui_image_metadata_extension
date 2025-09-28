@@ -101,6 +101,12 @@ class SaveImageWithMetaData:
                     "default": True,
                     "tooltip": "Select inputs from closest nodes first if true."
                 }),
+                "model_name": ("STRING", {
+                    "default": "",
+                    "tooltip": (
+                        "Optional model name to include in metadata. If left empty, the node will attempt to find the model name from the workflow."
+                    ),
+                }),
             },
             "hidden": {
                 "prompt": "PROMPT",
@@ -155,7 +161,7 @@ class SaveImageWithMetaData:
     def save_images(self, images, filename_prefix="ComfyUI", subdirectory_name="", prompt=None,
                     extra_pnginfo=None, extra_metadata=None, output_format="png",
                     quality="max", metadata_scope="full",
-                    include_batch_num=True, prefer_nearest=True, pnginfo_dict=None):
+                    include_batch_num=True, prefer_nearest=True, pnginfo_dict=None, model_name=""):
 
         extra_metadata = extra_metadata or {}
         base_format, save_workflow_json = self.parse_output_format(output_format)
@@ -167,6 +173,8 @@ class SaveImageWithMetaData:
 
         if metadata_scope in [MetadataScope.FULL, MetadataScope.PARAMETERS_ONLY] or self.needs_pnginfo_in_filename(segments):
             pnginfo_dict = pnginfo_dict or self.gen_pnginfo(prompt, prefer_nearest)
+            if model_name:
+                pnginfo_dict["Model"] = model_name.replace(".*\\", "").replace(".safetensors", "")
 
         filename_prefix = self.format_filename(filename_prefix, pnginfo_dict or {}, segments) + self.prefix_append
         subdirectory_name = self.format_filename(subdirectory_name, pnginfo_dict or {})
@@ -329,7 +337,7 @@ class SaveImageWithMetaData:
                 prompt = pnginfo_dict.get(prompt_key, "")
                 if not prompt:
                     print_warning(f"{prompt_key} not found in pnginfo_dict!")
-                # prompt = prompt.replace("\n", " ")
+                prompt = prompt.replace("\n", " ")
                 length = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
                 filename = filename.replace(segment, prompt[:length].strip() if length else prompt.strip())
 

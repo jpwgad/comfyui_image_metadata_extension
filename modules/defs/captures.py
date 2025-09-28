@@ -32,6 +32,12 @@ CAPTURE_FIELD_LIST = {
         MetaField.MODEL_NAME: {"field_name": "ckpt_name"},
         MetaField.MODEL_HASH: {"field_name": "ckpt_name", "format": calc_model_hash},
     },
+    "NunchakuQwenImageDiTLoader": {
+        MetaField.MODEL_NAME: {"field_name": "model_name"},
+    },
+    "NunchakuFluxDiTLoader": {
+        MetaField.MODEL_NAME: {"field_name": "model_path"},
+    },
     "CLIPSetLastLayer": {
         MetaField.CLIP_SKIP: {
             "field_name": "stop_at_clip_layer",
@@ -62,6 +68,16 @@ CAPTURE_FIELD_LIST = {
         MetaField.EMBEDDING_HASH: {
             "field_name": "text",
             "format": extract_embedding_hashes,
+        },
+    },
+    "Sage_DualCLIPTextEncode": {
+        MetaField.POSITIVE_PROMPT: {
+            "field_name": "pos",
+            "validate": is_positive_prompt,
+        },
+        MetaField.NEGATIVE_PROMPT: {
+            "field_name": "neg",
+            "validate": is_negative_prompt,
         },
     },
     "KSampler": {
