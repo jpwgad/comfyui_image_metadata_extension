@@ -80,6 +80,30 @@ CAPTURE_FIELD_LIST = {
             "validate": is_negative_prompt,
         },
     },
+    "TextEncodeQwenImageEditPlus": {
+        MetaField.POSITIVE_PROMPT: {    
+            "field_name": "prompt",
+            "validate": is_positive_prompt,
+        },
+    },
+    "TextEncodeQwenImageEditPlus_lrzjason": {
+        MetaField.POSITIVE_PROMPT: {    
+            "field_name": "prompt",
+            "validate": is_positive_prompt,
+        },
+    },
+    "Positive": {
+        MetaField.POSITIVE_PROMPT: {
+            "field_name": "positive",
+            "validate": is_positive_prompt,
+        },
+    },
+    "Negative": {
+        MetaField.NEGATIVE_PROMPT: {
+            "field_name": "negative",
+            "validate": is_negative_prompt,
+        },
+    },
     "KSampler": {
         MetaField.SEED: {"field_name": "seed"},
         MetaField.STEPS: {"field_name": "steps"},

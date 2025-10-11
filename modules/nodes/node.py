@@ -61,9 +61,9 @@ class SaveImageWithMetaData:
         return {
             "required": {
                 "images": ("IMAGE", {"tooltip": "The images to save."}),
-                "filename_prefix": ("STRING", {"default": "ComfyUI", "tooltip": "The prefix for the saved file. You can include formatting options like %date:yyyy-MM-dd% or %seed%, and combine them as needed, e.g., %date:hhmmss%_%seed%."}),
+                "filename_prefix": ("STRING", {"default": "%date:YYMMddhhmmss%", "tooltip": "The prefix for the saved file. You can include formatting options like %date:yyyy-MM-dd% or %seed%, and combine them as needed, e.g., %date:hhmmss%_%seed%."}),
                 "subdirectory_name": ("STRING", {
-                    "default": "",
+                    "default": "%date:yyyy-MM-dd%",
                     "tooltip": (
                         "Custom directory to save the images. Leave empty to use the default output "
                         "directory. You can include formatting options like %date:yyyy-MM-dd%."
@@ -94,7 +94,7 @@ class SaveImageWithMetaData:
                             "\n'none' - no metadata."
                 }),
                 "include_batch_num": ("BOOLEAN", {
-                    "default": True,
+                    "default": False,
                     "tooltip": "Include batch number in filename."
                 }),
                 "prefer_nearest": ("BOOLEAN", {
