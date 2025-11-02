@@ -14,83 +14,34 @@ from execution import get_input_data
 from comfy_execution.graph import DynamicPrompt
 
 
-class _CacheAdapter:
-    def __init__(self, caches_obj):
-        self._caches = caches_obj
-
-    def get_cache_dict(self):
-        c = self._caches
-        if c is None:
-            return None
-
-        # Try old property path
-        if hasattr(c, "outputs"):
-            try:
-                return c.outputs
-            except Exception:
-                pass
-
-        # Try new API methods
-        if hasattr(c, "get_latest_cache"):
-            try:
-                return c.get_latest_cache()
-            except Exception:
-                pass
-        if hasattr(c, "get_cache"):
-            try:
-                # some methods may require args, or none
-                return c.get_cache()
-            except TypeError:
-                return None
-        if hasattr(c, "get_latest"):
-            try:
-                return c.get_latest()
-            except Exception:
-                pass
-
-        # Fallback: maybe it is dict-like already
-        if isinstance(c, dict):
-            return c
-
-        # If object supports indexing
-        try:
-            return c[0]
-        except Exception:
-            pass
-
-        return None
-
-
 class Capture:
     @classmethod
     def get_inputs(cls):
         inputs = {}
         prompt = hook.current_prompt
         extra_data = hook.current_extra_data
-
-        caches_obj = getattr(getattr(hook, "prompt_executer", None), "caches", None)
-        cache_dict = _CacheAdapter(caches_obj).get_cache_dict() if caches_obj is not None else None
+        if hook.prompt_executer and hook.prompt_executer.caches:
+            outputs = hook.prompt_executer.caches.outputs
+        else:
+            outputs = None
 
         for node_id, obj in prompt.items():
             class_type = obj["class_type"]
             obj_class = NODE_CLASS_MAPPINGS[class_type]
             node_inputs = prompt[node_id]["inputs"]
+            input_data = get_input_data(
+                node_inputs, obj_class, node_id, outputs, DynamicPrompt(prompt), extra_data
+            )
 
-            try:
-                input_data = get_input_data(
-                    node_inputs, obj_class, node_id, cache_dict, DynamicPrompt(prompt), extra_data
-                )
-            except Exception:
-                # fallback to safe empty
-                input_data = [{}, {}]
-
+            # Process field data mappings for the captured inputs
             for node_class, metas in CAPTURE_FIELD_LIST.items():
                 if class_type != node_class:
                     continue
+                
                 for meta, field_data in metas.items():
                     # Skip invalidated nodes
                     if field_data.get("validate") and not field_data["validate"](
-                        node_id, obj, prompt, extra_data, cache_dict, input_data
+                        node_id, obj, prompt, extra_data, outputs, input_data
                     ):
                         continue
 
@@ -98,12 +49,14 @@ class Capture:
                     if meta not in inputs:
                         inputs[meta] = []
 
-                    if "value" in field_data and field_data["value"] is not None:
-                        inputs[meta].append((node_id, field_data["value"]))
+                    # Get field value or selector
+                    value = field_data.get("value")
+                    if value is not None:
+                        inputs[meta].append((node_id, value))
                     else:
                         selector = field_data.get("selector")
                         if selector:
-                            v = selector(node_id, obj, prompt, extra_data, cache_dict, input_data)
+                            v = selector(node_id, obj, prompt, extra_data, outputs, input_data)
                             cls._append_value(inputs, meta, node_id, v)
                             continue
 

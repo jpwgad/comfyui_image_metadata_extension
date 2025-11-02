@@ -21,13 +21,23 @@ class Trace:
             visit_node(current_node_id, node, distance)
 
             for value in node.get("inputs", {}).values():
-                if isinstance(value, list) and value:
-                    next_id = value[0]
+                if isinstance(value, list):
+                    for next_id in value:
+                        if next_id is None:
+                            continue
+                        edge = (current_node_id, next_id)
+                        if edge in visited_edges or (edge_condition and not edge_condition(current_node_id, next_id)):
+                            continue
+                        visited_edges.add(edge)
+                        Q.append((next_id, distance + 1))
+                elif value is not None:
+                    next_id = value
                     edge = (current_node_id, next_id)
                     if edge in visited_edges or (edge_condition and not edge_condition(current_node_id, next_id)):
                         continue
                     visited_edges.add(edge)
                     Q.append((next_id, distance + 1))
+
 
     @classmethod
     def _compute_trace_signature(cls, start_node_id, prompt):
