@@ -13,6 +13,24 @@ from .trace import Trace
 from execution import get_input_data
 from comfy_execution.graph import DynamicPrompt
 
+class OutputCacheCompat:
+    """Handles cache access across ComfyUI versions.
+    Uses get_output_cache() in version 0.3.67 and newer, get() in 0.3.66 and lower.
+    """
+    def __init__(self, cache):
+        self._cache = cache
+
+    def get_output_cache(self, input_unique_id, unique_id=None):
+        # For version 0.3.67 and newer
+        if hasattr(self._cache, "get"):
+            return self._cache.get(input_unique_id)
+        return getattr(self._cache, "outputs", {}).get(input_unique_id, None)
+
+    def get(self, input_unique_id):
+        # For version 0.3.66 and lower
+        if hasattr(self._cache, "get"):
+            return self._cache.get(input_unique_id)
+        return getattr(self._cache, "outputs", {}).get(input_unique_id, None)
 
 class Capture:
     @classmethod
@@ -20,15 +38,22 @@ class Capture:
         inputs = {}
         prompt = hook.current_prompt
         extra_data = hook.current_extra_data
+
         if hook.prompt_executer and hook.prompt_executer.caches:
-            outputs = hook.prompt_executer.caches.outputs
+            raw_outputs = hook.prompt_executer.caches.outputs
+            outputs = (
+                raw_outputs
+                if hasattr(raw_outputs, "get_output_cache")
+                else OutputCacheCompat(raw_outputs)
+            )
         else:
             outputs = None
 
         for node_id, obj in prompt.items():
             class_type = obj["class_type"]
             obj_class = NODE_CLASS_MAPPINGS[class_type]
-            node_inputs = prompt[node_id]["inputs"]
+            node_inputs = obj["inputs"]
+
             input_data = get_input_data(
                 node_inputs, obj_class, node_id, outputs, DynamicPrompt(prompt), extra_data
             )
@@ -37,7 +62,7 @@ class Capture:
             for node_class, metas in CAPTURE_FIELD_LIST.items():
                 if class_type != node_class:
                     continue
-                
+
                 for meta, field_data in metas.items():
                     # Skip invalidated nodes
                     if field_data.get("validate") and not field_data["validate"](
@@ -53,20 +78,21 @@ class Capture:
                     value = field_data.get("value")
                     if value is not None:
                         inputs[meta].append((node_id, value))
-                    else:
-                        selector = field_data.get("selector")
-                        if selector:
-                            v = selector(node_id, obj, prompt, extra_data, outputs, input_data)
-                            cls._append_value(inputs, meta, node_id, v)
-                            continue
+                        continue
 
-                        # Fetch and process value from field_name
-                        field_name = field_data["field_name"]
-                        value = input_data[0].get(field_name)
-                        if value is not None:
-                            format_func = field_data.get("format")
-                            v = cls._apply_formatting(value, input_data, format_func)
-                            cls._append_value(inputs, meta, node_id, v)
+                    selector = field_data.get("selector")
+                    if selector:
+                        v = selector(node_id, obj, prompt, extra_data, outputs, input_data)
+                        cls._append_value(inputs, meta, node_id, v)
+                        continue
+
+                    # Fetch and process value from field_name
+                    field_name = field_data["field_name"]
+                    value = input_data[0].get(field_name)
+                    if value is not None:
+                        format_func = field_data.get("format")
+                        v = cls._apply_formatting(value, input_data, format_func)
+                        cls._append_value(inputs, meta, node_id, v)
 
         return inputs
 
