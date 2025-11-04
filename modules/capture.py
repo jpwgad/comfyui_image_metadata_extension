@@ -13,6 +13,7 @@ from .trace import Trace
 from execution import get_input_data
 from comfy_execution.graph import DynamicPrompt
 
+
 class OutputCacheCompat:
     """Handles cache access across ComfyUI versions.
     Uses get_output_cache() in version 0.3.67 and newer, get() in 0.3.66 and lower.
@@ -31,6 +32,13 @@ class OutputCacheCompat:
         if hasattr(self._cache, "get"):
             return self._cache.get(input_unique_id)
         return getattr(self._cache, "outputs", {}).get(input_unique_id, None)
+    
+    # fix: https://github.com/edelvarden/comfyui_image_metadata_extension/issues/67
+    def get_cache(self, input_unique_id, unique_id=None):
+        if hasattr(self._cache, "get_cache"):
+            return self._cache.get_cache(input_unique_id, unique_id)
+        return self.get_output_cache(input_unique_id, unique_id)
+
 
 class Capture:
     @classmethod

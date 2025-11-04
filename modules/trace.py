@@ -22,22 +22,30 @@ class Trace:
 
             for value in node.get("inputs", {}).values():
                 if isinstance(value, list):
-                    for next_id in value:
-                        if next_id is None:
-                            continue
-                        edge = (current_node_id, next_id)
-                        if edge in visited_edges or (edge_condition and not edge_condition(current_node_id, next_id)):
-                            continue
-                        visited_edges.add(edge)
-                        Q.append((next_id, distance + 1))
-                elif value is not None:
-                    next_id = value
+                    values = value
+                else:
+                    values = [value]
+
+                for next_id in values:
+                    if next_id is None:
+                        continue
+
+                    # Handle dict-based links (ComfyUI internal link structures)
+                    if isinstance(next_id, dict):
+                        next_id = next_id.get("link") or next_id.get("id") or next_id.get("node_id")
+
+                    # Skip if still invalid
+                    if next_id is None or isinstance(next_id, dict):
+                        continue
+
+                    next_id = str(next_id) if isinstance(next_id, int) else next_id
+
                     edge = (current_node_id, next_id)
                     if edge in visited_edges or (edge_condition and not edge_condition(current_node_id, next_id)):
                         continue
+
                     visited_edges.add(edge)
                     Q.append((next_id, distance + 1))
-
 
     @classmethod
     def _compute_trace_signature(cls, start_node_id, prompt):
