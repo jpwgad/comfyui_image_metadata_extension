@@ -62,6 +62,21 @@ def get_unet_dtype(node_id, obj, prompt, extra_data, outputs, input_data):
     if input_data[0].get("load_mode", ["full_checkpoint"])[0] == "separate_components":
         return input_data[0].get("weight_dtype", [None])[0]
     return None
+    
+def get_metadata_field(field_name, node_id, obj, prompt, extra_data, outputs, input_data):
+    """
+    Generic helper to safely get a value from our metadata dictionary input
+    This version correctly handles the plain dictionary object sent by the ModelAssembler.
+    """
+    # The 'metadata' input is a list containing one item: our dictionary.
+    metadata_dict = input_data[0].get("metadata", [None])[0]
+    
+    # We just need to check if we received a valid dictionary.
+    if metadata_dict and isinstance(metadata_dict, dict):
+        return metadata_dict.get(field_name)
+        
+    return None
+
 
 CAPTURE_FIELD_LIST = {
     "ModelAssembler": {
@@ -73,5 +88,16 @@ CAPTURE_FIELD_LIST = {
         "Clip Model Hash(es)": {"selector": get_clip_hashes},
         "Clip Type": {"selector": get_clip_type},
         "UNet Weight Type": {"selector": get_unet_dtype},
+    },
+    "ModelAssemblerMetadata": {
+        # These selectors now work correctly because the helper function is fixed.
+        MetaField.MODEL_NAME:     {"selector": lambda *args: get_metadata_field("model_name", *args)},
+        MetaField.MODEL_HASH:     {"selector": lambda *args: get_metadata_field("model_hash", *args)},
+        MetaField.VAE_NAME:       {"selector": lambda *args: get_metadata_field("vae_name", *args)},
+        MetaField.VAE_HASH:       {"selector": lambda *args: get_metadata_field("vae_hash", *args)},
+        "Clip Model Name(s)": {"selector": lambda *args: get_metadata_field("clip_names", *args)},
+        "Clip Model Hash(es)": {"selector": lambda *args: get_metadata_field("clip_hashes", *args)},
+        "Clip Type":          {"selector": lambda *args: get_metadata_field("clip_type", *args)},
+        "UNet Weight Type":   {"selector": lambda *args: get_metadata_field("unet_dtype", *args)},
     }
 }
